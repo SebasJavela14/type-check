@@ -1,0 +1,1885 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Type Check</title>
+<meta name="description" content="Pair two typefaces and proof them on real text. Editorial, mobile and specimen views, two pairs side by side, CSS out.">
+<meta property="og:title" content="Type Check">
+<meta property="og:description" content="Pair two typefaces and proof them on real text.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%23cfcfca%22/%3E%3Ccircle cx=%2212%22 cy=%2216%22 r=%227%22 fill=%22%23c23a1c%22/%3E%3Ccircle cx=%2220%22 cy=%2216%22 r=%227%22 fill=%22%231d6f93%22 fill-opacity=%22.85%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400..700&family=Martian+Mono:wdth,wght@75..112.5,400..500&display=swap">
+<style>
+/* ── tokens: chrome (the light table) ───────────────────────── */
+/* Neutral N8 grey so colour judgement stays honest; sheets are lit from above.
+   Pair A = vermilion pencil, pair B = non-photo blue. */
+:root{
+  --bg:#cfcfca; --bg-sunk:#c6c6c1; --panel:#dcdcd7; --raised:#ebebe6;
+  --fg:#161615; --fg-mid:#3d3d3a; --fg-dim:#555551;
+  --line:#b6b6b0; --line-soft:#c8c8c3;
+  --a:#c23a1c; --a-soft:rgba(194,58,28,.10); --a-line:rgba(194,58,28,.45);
+  --b:#1d6f93; --b-soft:rgba(29,111,147,.12); --b-line:rgba(29,111,147,.45);
+  --a-ink:#ef7a5d; --b-ink:#6cc0e5;   /* pencils on the Ink sheet */
+  --solid-hover:#000;
+  --focus:#161615;
+  --shadow:0 1px 2px rgba(0,0,0,.08), 0 20px 44px -18px rgba(0,0,0,.42);
+  --ui:"Hanken Grotesk","Helvetica Neue",Arial,sans-serif;
+  --mono:"Martian Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--ui); font-size:13px; line-height:1.45;
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px; border-radius:3px}
+button,input,select,textarea{font:inherit; color:inherit}
+button{cursor:pointer}
+
+/* ── shell ──────────────────────────────────────────────────── */
+.app{display:flex; flex-direction:column; height:100dvh}
+
+.topbar{
+  flex:0 0 auto; display:flex; align-items:center; gap:16px;
+  padding:0 18px; height:56px; background:var(--bg); position:relative; z-index:30;
+}
+.brand{display:flex; align-items:baseline; gap:10px; padding-inline-end:4px; white-space:nowrap}
+.brand b{font-weight:600; font-size:15px; letter-spacing:-.01em}
+.brand a{font-size:12px; color:var(--fg-dim); text-decoration:none; padding-block:4px}
+.brand a:hover{color:var(--fg); text-decoration:underline; text-underline-offset:3px}
+.spacer{flex:1 1 auto}
+
+/* segmented control */
+.seg{display:flex; background:transparent; border:1px solid var(--line); border-radius:999px; padding:2px; gap:2px}
+.seg button{
+  border:0; background:transparent; color:var(--fg-mid);
+  padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:450;
+  transition:background .13s, color .13s;
+}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed="true"]{background:var(--raised); color:var(--fg); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+.btn{
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid var(--line); background:transparent; color:var(--fg);
+  border-radius:999px; padding:6px 13px; font-size:12.5px; font-weight:450;
+  transition:border-color .13s, color .13s, background .13s;
+}
+.btn:hover{border-color:var(--fg-mid)}
+.btn[aria-pressed="true"]{background:var(--raised); border-color:var(--fg-mid); color:var(--fg); font-weight:600}
+.btn.icon{padding:6px; width:32px; justify-content:center}
+.btn.primary{background:var(--fg); border-color:var(--fg); color:var(--raised)}
+.btn.primary:hover{background:var(--solid-hover)}
+.btn svg{width:14px; height:14px; display:block}
+
+.main{flex:1 1 auto; display:flex; min-height:0}
+
+.field{display:flex; flex-direction:column; gap:5px}
+.field > label,.rowlab{
+  font-family:var(--mono); font-stretch:85%; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-mid);
+}
+.rowhead{display:flex; align-items:baseline; justify-content:space-between; gap:8px}
+.val{font-family:var(--mono); font-size:10.5px; color:var(--fg-mid); font-variant-numeric:tabular-nums}
+.val.auto{color:var(--fg-dim); font-style:italic}
+
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:24px; background:transparent; margin:0;
+}
+input[type=range]::-webkit-slider-runnable-track{height:3px; background:var(--line); border-radius:2px}
+input[type=range]::-moz-range-track{height:3px; background:var(--line); border-radius:2px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+  background:var(--raised); border:1.5px solid var(--accent-cur,var(--fg-mid)); margin-top:-5px;
+  box-shadow:0 1px 2px rgba(0,0,0,.18);
+}
+input[type=range]::-moz-range-thumb{
+  width:13px; height:13px; border-radius:50%; border:1.5px solid var(--accent-cur,var(--fg-mid));
+  background:var(--raised); box-shadow:0 1px 2px rgba(0,0,0,.18);
+}
+input[type=range]:hover::-webkit-slider-thumb{border-color:var(--accent-cur,var(--fg))}
+
+select,input[type=text]{
+  width:100%; background:var(--raised); border:1px solid var(--line);
+  border-radius:6px; padding:6px 8px; font-size:12.5px;
+}
+select{cursor:pointer; appearance:none; padding-right:24px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;
+  background-size:4px 4px,4px 4px; background-repeat:no-repeat;
+}
+input[type=text]::placeholder{color:var(--fg-dim)}
+
+.pill{
+  border:1px solid var(--line); background:var(--raised); color:var(--fg-mid);
+  border-radius:5px; padding:3px 9px; font-size:11.5px; line-height:1.3; min-height:28px;
+}
+.pill[aria-pressed="true"]{background:var(--accent-soft-cur,var(--a-soft)); border-color:var(--accent-cur,var(--a)); color:var(--accent-cur,var(--a)); font-weight:500}
+.inline{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+.reset{
+  border:0; background:transparent; color:var(--fg-dim); font-family:var(--mono);
+  font-size:10.5px; letter-spacing:.06em; padding:0 2px; text-decoration:underline; text-underline-offset:2px;
+}
+.reset:hover{color:var(--fg-mid)}
+.hint{font-size:12px; color:var(--fg-dim); line-height:1.45}
+
+</style>
+
+<style>
+/* ── font combobox ──────────────────────────────────────────── */
+.combo{position:relative}
+.combo .field-in{
+  display:flex; align-items:center; gap:7px; width:100%;
+  background:var(--raised); border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+  text-align:left; transition:border-color .13s;
+}
+.combo .field-in:hover{border-color:var(--fg-dim)}
+.combo .field-in .nm{
+  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:13px; color:var(--fg);
+}
+.combo .field-in .cat{
+  font-family:var(--mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--fg-dim); flex:0 0 auto;
+}
+.pop{
+  position:absolute; z-index:60; top:calc(100% + 5px); left:0; right:0;
+  background:var(--raised); border:1px solid var(--line); border-radius:9px;
+  box-shadow:var(--shadow); overflow:hidden; display:none;
+}
+.combo.open .pop{display:block}
+.pop .search{padding:8px; border-bottom:1px solid var(--line-soft)}
+.pop .filters{display:flex; gap:4px; padding:7px 8px; border-bottom:1px solid var(--line-soft); flex-wrap:wrap}
+.pop .filters .pill{font-size:10px; padding:2px 7px}
+.pop ul{list-style:none; margin:0; padding:4px; max-height:288px; overflow-y:auto; overscroll-behavior:contain}
+.pop li{
+  padding:6px 9px; border-radius:5px; cursor:pointer; display:flex; align-items:baseline; gap:8px;
+}
+.pop li .lnm{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px}
+.pop li .lmeta{font-family:var(--mono); font-size:9px; letter-spacing:.06em; color:var(--fg-dim); text-transform:uppercase; flex:0 0 auto}
+.pop li[aria-selected="true"]{background:var(--accent-soft-cur,var(--a-soft))}
+.pop li.cursor{background:var(--bg-sunk)}
+.pop li[aria-selected="true"].cursor{background:var(--accent-soft-cur,var(--a-soft)); box-shadow:inset 0 0 0 1px var(--accent-cur,var(--a))}
+.pop .grouplab{
+  padding:7px 9px 3px; font-family:var(--mono); font-size:9px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--fg-dim);
+}
+.pop .empty{padding:16px 10px; text-align:center; color:var(--fg-dim); font-size:12px}
+
+/* ── stage ──────────────────────────────────────────────────── */
+.stage{flex:1 1 auto; display:flex; min-width:0; gap:22px; padding:6px 22px 0; background:var(--bg)}
+.pane{
+  flex:1 1 50%; min-width:0; overflow-y:auto; overscroll-behavior:contain;
+  position:relative; background:var(--paper); color:var(--pfg); border-radius:3px 3px 0 0;
+  box-shadow:0 0 0 1px rgba(0,0,0,.05), 0 18px 40px -18px rgba(0,0,0,.35), 0 2px 4px rgba(0,0,0,.06);
+  transition:box-shadow .2s;
+}
+/* the sheet being edited wears its pencil colour */
+body[data-compare="on"] .pane{cursor:pointer}
+body[data-compare="on"] .pane.editing{
+  cursor:auto; box-shadow:0 0 0 2px var(--accent-cur), 0 18px 40px -18px rgba(0,0,0,.35);
+}
+body:not([data-compare="on"]) .pane[data-pair="b"]{display:none}
+
+.pane[data-ground="light"]{
+  --paper:#fbfbf8; --pfg:#161615; --pmid:#454542; --pdim:#686864;
+  --pline:#e7e7e2; --prule:#cdcdc7;
+}
+.pane[data-ground="dark"]{
+  --paper:#1a1a19; --pfg:#ececE7; --pmid:#adada7; --pdim:#8c8c86;
+  --pline:#2b2b29; --prule:#454542;
+}
+
+.panetag{
+  position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:8px;
+  padding:6px 12px; backdrop-filter:blur(8px);
+  background:color-mix(in srgb, var(--paper) 86%, transparent);
+  border-bottom:1px solid var(--pline);
+  font-family:var(--mono); font-stretch:85%; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+}
+body:not([data-compare="on"]) .panetag{display:none}
+.panetag .dot{width:6px; height:6px; border-radius:50%; background:var(--accent-cur)}
+.panetag .who{color:var(--accent-cur); font-weight:500}
+.panetag .fonts{color:var(--pdim); text-transform:none; letter-spacing:.02em; font-size:10px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pane[data-pair="a"]{--accent-cur:var(--a); --accent-soft-cur:var(--a-soft)}
+.pane[data-pair="b"]{--accent-cur:var(--b); --accent-soft-cur:var(--b-soft)}
+/* pencils read lighter on ink so small accent text keeps its contrast */
+.pane[data-ground="dark"][data-pair="a"]{--accent-cur:var(--a-ink)}
+.pane[data-ground="dark"][data-pair="b"]{--accent-cur:var(--b-ink)}
+
+/* type application */
+.disp{
+  font-family:var(--dsp-ff); font-weight:var(--dsp-w); font-style:var(--dsp-style);
+  letter-spacing:var(--dsp-ls); line-height:var(--dsp-lh);
+  font-variation-settings:var(--dsp-var); font-optical-sizing:var(--dsp-opsz);
+  text-wrap:balance;
+}
+.bod{
+  font-family:var(--bod-ff); font-weight:var(--bod-w); font-style:var(--bod-style);
+  letter-spacing:var(--bod-ls); line-height:var(--bod-lh);
+  font-variation-settings:var(--bod-var); font-optical-sizing:var(--bod-opsz);
+}
+
+/* ── view: editorial ────────────────────────────────────────── */
+.ed{--ed-pad:40px; padding:56px var(--ed-pad) 150px; max-width:calc(var(--measure) + 12ch);
+    margin:0 auto; font-size:var(--fs-body)}
+/* body-size wrapper so every ch-based measure resolves in the same font */
+.ed .mw,.ed .col{max-width:var(--measure); font-size:var(--fs-body)}
+.ed .mw > p,.ed .mw > h1{max-width:none}
+.ed .kicker{
+  font-family:var(--bod-ff); font-weight:600; font-size:var(--fs-xs);
+  letter-spacing:.15em; text-transform:uppercase; color:var(--accent-cur);
+  margin:0 0 20px; display:flex; align-items:center; gap:10px;
+}
+.ed .kicker::after{content:""; flex:1; height:1px; background:var(--pline)}
+.ed h1{margin:0 0 22px; font-size:var(--fs-h1); color:var(--pfg)}
+.ed .deck{margin:0 0 26px; font-size:var(--fs-deck); color:var(--pmid); text-wrap:pretty}
+.ed .byline{
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; font-size:var(--fs-xs);
+  color:var(--pdim); padding:12px 0 0; border-top:1px solid var(--pline); margin-bottom:40px;
+}
+.ed .byline strong{color:var(--pmid); font-weight:600}
+.ed .byline .sep{width:3px; height:3px; border-radius:50%; background:var(--prule)}
+.ed p{margin:0 0 1.05em; font-size:var(--fs-body); max-width:var(--measure); color:var(--pfg); text-wrap:pretty}
+.ed .lede::first-letter{
+  float:left; font-family:var(--dsp-ff); font-weight:var(--dsp-w); font-size:3.2em;
+  line-height:.8; margin:.07em .09em -.02em 0; color:var(--accent-cur);
+}
+.ed h2{margin:2.1em 0 .7em; font-size:var(--fs-h2); color:var(--pfg); max-width:var(--measure)}
+.ed h3{margin:1.7em 0 .5em; font-size:var(--fs-h3); color:var(--pfg); max-width:var(--measure)}
+.ed blockquote{
+  margin:2em 0; padding:0 0 0 22px; border-left:2px solid var(--accent-cur);
+  font-size:var(--fs-h3); color:var(--pfg); max-width:var(--measure);
+}
+.ed blockquote p{font-size:inherit; margin:0}
+.ed blockquote cite{
+  display:block; margin-top:12px; font-family:var(--bod-ff); font-style:normal;
+  font-size:var(--fs-xs); letter-spacing:.09em; text-transform:uppercase; color:var(--pdim);
+}
+.ed ul{margin:0 0 1.3em; padding-left:1.15em; max-width:var(--measure); font-size:var(--fs-body)}
+.ed li{margin-bottom:.42em; padding-left:.2em}
+.ed li::marker{color:var(--prule)}
+.ed figure{margin:2.3em 0; max-width:var(--measure)}
+.ed .stems{
+  height:190px; display:flex; align-items:flex-end; gap:6%; padding:0 8%;
+  border-bottom:1px solid var(--prule);
+}
+.ed .stem{flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:8px; height:100%; justify-content:flex-end}
+.ed .stem i{
+  position:relative; display:block; width:2px; height:calc(var(--h) * 140px); background:var(--pmid); border-radius:1px;
+}
+.ed .stem i::before{
+  content:""; position:absolute; top:-9px; left:50%; width:12px; height:12px; margin-left:-6px;
+  border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--accent-cur);
+}
+.ed .stem span{
+  font-family:var(--bod-ff); font-size:var(--fs-xs); color:var(--pdim);
+  font-variant-numeric:tabular-nums lining-nums; padding-bottom:8px;
+}
+.ed figcaption{margin-top:10px; font-size:var(--fs-sm); color:var(--pmid); line-height:1.5}
+.ed figcaption b{color:var(--pfg); font-weight:600}
+.ed .stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1px;
+  background:var(--pline); border:1px solid var(--pline); margin:2.3em 0; max-width:var(--measure);
+}
+.ed .stats div{background:var(--paper); padding:14px 15px}
+.ed .stats dt{
+  font-family:var(--bod-ff); font-size:var(--fs-xs); letter-spacing:.11em; text-transform:uppercase;
+  color:var(--pdim); margin-bottom:6px;
+}
+.ed .stats dd{
+  margin:0; font-size:var(--fs-h3); color:var(--pfg); font-variant-numeric:tabular-nums lining-nums;
+}
+.ed .foot{
+  margin-top:3em; padding-top:14px; border-top:1px solid var(--pline);
+  font-size:var(--fs-sm); color:var(--pdim); line-height:1.55;
+}
+.ed .foot sup{color:var(--accent-cur); font-weight:600; margin-right:3px}
+.ed em{font-style:italic}
+.ed{position:relative}
+</style>
+
+<style>
+/* ── view: mobile ───────────────────────────────────────────── */
+.mob{padding:34px 26px 130px; display:flex; gap:26px; align-items:flex-start; overflow-x:auto; overscroll-behavior-x:contain}
+.frame{flex:0 0 auto; width:375px}
+.frame .cap{
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--pdim); margin-bottom:9px; display:flex; align-items:center; gap:7px;
+}
+.frame .cap::after{content:""; flex:1; height:1px; background:var(--pline)}
+.device{
+  width:375px; height:734px; border:1px solid var(--prule); border-radius:26px;
+  background:var(--paper); overflow:hidden; display:flex; flex-direction:column;
+  box-shadow:0 1px 2px rgba(0,0,0,.07), 0 18px 40px -22px rgba(0,0,0,.35);
+}
+.statusbar{
+  flex:0 0 auto; height:38px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 20px 0 22px; font-family:var(--bod-ff); font-size:12px; font-weight:600; color:var(--pfg);
+  font-variant-numeric:tabular-nums;
+}
+.statusbar .sig{display:flex; gap:3px; align-items:flex-end}
+.statusbar .sig i{display:block; width:3px; background:var(--pfg); border-radius:1px}
+.statusbar .sig i:nth-child(1){height:4px}
+.statusbar .sig i:nth-child(2){height:6px}
+.statusbar .sig i:nth-child(3){height:8px}
+.statusbar .sig i:nth-child(4){height:10px; opacity:.3}
+.statusbar .batt{width:20px; height:10px; border:1px solid var(--pmid); border-radius:3px; position:relative}
+.statusbar .batt::before{content:""; position:absolute; inset:1.5px; right:6px; background:var(--pfg); border-radius:1px}
+.navbar{
+  flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:6px 18px 12px;
+  border-bottom:1px solid var(--pline);
+}
+.navbar .back{width:16px; height:16px; color:var(--pmid); flex:0 0 auto}
+.navbar .ttl{
+  flex:1; font-family:var(--bod-ff); font-size:var(--m-xs); font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--pmid);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.screen{flex:1 1 auto; overflow:hidden; position:relative}
+.screen::after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:56px; pointer-events:none;
+  background:linear-gradient(to bottom,transparent,var(--paper));
+}
+.screen > .inner{padding:20px 22px 40px}
+
+/* frame 1 — article */
+.m-kick{
+  font-family:var(--bod-ff); font-weight:600; font-size:var(--m-xs); letter-spacing:.15em;
+  text-transform:uppercase; color:var(--accent-cur); margin:0 0 12px;
+}
+.m-h1{margin:0 0 12px; font-size:var(--m-h1); color:var(--pfg)}
+.m-deck{margin:0 0 16px; font-size:var(--m-deck); color:var(--pmid); text-wrap:pretty}
+.m-meta{
+  display:flex; align-items:center; gap:8px; font-size:var(--m-xs); color:var(--pdim);
+  padding-bottom:16px; border-bottom:1px solid var(--pline); margin-bottom:18px;
+}
+.m-meta .av{width:22px; height:22px; border-radius:50%; background:var(--accent-cur); opacity:.85; flex:0 0 auto}
+.m-meta strong{color:var(--pmid); font-weight:600}
+.m-body p{margin:0 0 .95em; font-size:var(--m-body); color:var(--pfg); text-wrap:pretty}
+.m-h2{margin:1.5em 0 .5em; font-size:var(--m-h2); color:var(--pfg)}
+
+/* frame 2 — index */
+.m-secthead{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  margin:0 0 4px;
+}
+.m-secthead h2{margin:0; font-size:var(--m-h2); color:var(--pfg)}
+.m-secthead .n{
+  font-family:var(--bod-ff); font-size:var(--m-xs); letter-spacing:.1em; text-transform:uppercase;
+  color:var(--pdim); font-variant-numeric:tabular-nums;
+}
+.m-sub{margin:0 0 20px; font-size:var(--m-sm); color:var(--pmid)}
+.m-list{list-style:none; margin:0; padding:0}
+.m-list li{padding:15px 0; border-top:1px solid var(--pline); display:flex; gap:13px; align-items:flex-start}
+.m-list .idx{
+  font-family:var(--bod-ff); font-size:var(--m-xs); color:var(--pdim); font-variant-numeric:tabular-nums lining-nums;
+  padding-top:.35em; flex:0 0 20px;
+}
+.m-list .txt{flex:1 1 auto; min-width:0}
+.m-list h3{margin:0 0 4px; font-size:var(--m-h3); color:var(--pfg); text-wrap:pretty}
+.m-list .sub{
+  margin:0; font-size:var(--m-xs); color:var(--pdim); display:flex; gap:7px; align-items:center;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.m-list .sub .sep{width:2.5px; height:2.5px; border-radius:50%; background:var(--prule); flex:0 0 auto}
+.m-list .sub em{font-style:normal; color:var(--accent-cur)}
+
+/* frame 3 — quote card */
+.m-card{
+  margin:6px 0 0; padding:30px 26px 26px; border:1px solid var(--pline); border-radius:3px;
+  background:var(--paper); display:flex; flex-direction:column; gap:20px; min-height:430px;
+}
+.m-card .mark{
+  font-family:var(--dsp-ff); font-weight:var(--dsp-w); font-size:56px; line-height:.5;
+  color:var(--accent-cur); height:26px;
+}
+.m-card .q{margin:0; font-size:var(--m-quote); color:var(--pfg); text-wrap:pretty; flex:1 1 auto}
+.m-card .attrib{
+  padding-top:16px; border-top:1px solid var(--pline); font-size:var(--m-xs); color:var(--pdim);
+  letter-spacing:.09em; text-transform:uppercase;
+}
+.m-card .attrib b{display:block; color:var(--pfg); font-weight:600; letter-spacing:.05em; margin-bottom:3px; text-transform:none; font-size:var(--m-sm)}
+.m-actions{display:flex; gap:9px; margin-top:16px}
+.m-actions button{
+  flex:1; border:1px solid var(--pline); background:transparent; color:var(--pmid);
+  border-radius:7px; padding:11px 10px; font-family:var(--bod-ff); font-size:var(--m-sm);
+  font-weight:500; letter-spacing:var(--bod-ls);
+}
+.m-actions button.pri{background:var(--accent-cur); border-color:var(--accent-cur); color:var(--paper)}
+
+/* ── view: specimen ─────────────────────────────────────────── */
+.spec{padding:44px 40px 150px; max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:46px}
+.spec section{display:flex; flex-direction:column; gap:16px}
+.slab{
+  font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--pdim); display:flex; align-items:center; gap:10px;
+}
+.slab::after{content:""; flex:1; height:1px; background:var(--pline)}
+.slab b{color:var(--accent-cur); font-weight:500}
+
+.faceblock{padding:4px 0 22px; border-bottom:1px solid var(--pline)}
+.faceblock:last-child{border-bottom:0; padding-bottom:0}
+.facehead{
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.06em; color:var(--pdim);
+  font-variant-numeric:tabular-nums;
+}
+.facehead .role{
+  color:var(--accent-cur); letter-spacing:.13em; text-transform:uppercase; font-weight:500;
+}
+.facehead .fam{color:var(--pfg); font-family:var(--ui); font-size:12.5px; font-weight:500; letter-spacing:0}
+.bigline{
+  font-size:clamp(38px,5.8vw,82px); color:var(--pfg); margin:0;
+  word-break:break-word; overflow-wrap:anywhere;
+}
+.bigline[contenteditable]:focus{outline:2px solid var(--accent-cur); outline-offset:6px; border-radius:2px}
+.glyphs{margin:14px 0 0; font-size:19px; color:var(--pmid); line-height:1.7; word-spacing:.14em; overflow-wrap:anywhere}
+
+.ladder{display:flex; flex-direction:column}
+.rung{
+  display:flex; align-items:baseline; gap:18px; padding:9px 0; border-bottom:1px solid var(--pline);
+}
+.rung:last-child{border-bottom:0}
+.rung .k{
+  flex:0 0 118px; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--pdim); font-variant-numeric:tabular-nums; display:flex; gap:8px;
+}
+.rung .k i{font-style:normal; color:var(--prule)}
+.rung .s{flex:1 1 auto; min-width:0; color:var(--pfg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+.paras{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr)); gap:30px}
+.paras .col{display:flex; flex-direction:column; gap:9px}
+.paras .cl{
+  font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--pdim);
+  font-variant-numeric:tabular-nums;
+}
+.paras p{margin:0; color:var(--pfg)}
+
+.mixgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:1px; background:var(--pline); border:1px solid var(--pline)}
+.mixgrid .cell{background:var(--paper); padding:18px 18px 20px; display:flex; flex-direction:column; gap:7px}
+.mixgrid .cell h4{margin:0; font-size:var(--fs-h3); color:var(--pfg)}
+.mixgrid .cell p{margin:0; font-size:var(--fs-sm); color:var(--pmid)}
+.mixgrid .cell .num{
+  font-size:var(--fs-h2); color:var(--pfg); font-variant-numeric:tabular-nums lining-nums;
+  letter-spacing:var(--dsp-ls);
+}
+
+/* ── overlays ───────────────────────────────────────────────── */
+.drop{
+  position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center;
+  background:color-mix(in srgb,var(--bg) 78%,transparent); backdrop-filter:blur(3px);
+}
+body[data-drag="on"] .drop{display:flex}
+.drop .card{
+  border:2px dashed var(--a); border-radius:14px; padding:36px 46px; text-align:center;
+  background:var(--panel); box-shadow:var(--shadow); max-width:400px;
+}
+.drop .card b{display:block; font-size:15px; margin-bottom:7px}
+.drop .card span{color:var(--fg-mid); font-size:12.5px; line-height:1.5; display:block}
+
+.toast{
+  position:fixed; bottom:calc(96px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%) translateY(14px);
+  z-index:220; background:var(--fg); color:var(--bg); padding:9px 16px; border-radius:8px;
+  font-size:12.5px; font-weight:450; box-shadow:var(--shadow);
+  opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
+  max-width:min(520px,92vw); text-align:center;
+}
+.toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+
+.sheet{
+  position:fixed; inset:0; z-index:210; display:none; align-items:center; justify-content:center; padding:26px;
+  background:color-mix(in srgb,var(--bg-sunk) 72%,transparent);
+}
+.sheet.on{display:flex}
+.sheet .box{
+  background:var(--panel); border:1px solid var(--line); border-radius:13px; box-shadow:var(--shadow);
+  width:min(680px,100%); max-height:82dvh; display:flex; flex-direction:column; overflow:hidden;
+}
+.sheet .box header{
+  display:flex; align-items:center; gap:10px; padding:13px 15px; border-bottom:1px solid var(--line);
+}
+.sheet .box header b{font-size:13.5px; font-weight:600}
+.sheet .box header .sub{font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--fg-dim)}
+.sheet pre{
+  margin:0; padding:16px; overflow:auto; flex:1 1 auto; font-family:var(--mono);
+  font-size:11.5px; line-height:1.65; color:var(--fg); background:var(--bg-sunk); tab-size:2;
+}
+.sheet .box footer{display:flex; gap:8px; padding:11px 15px; border-top:1px solid var(--line); justify-content:flex-end}
+
+
+/* ── responsive ─────────────────────────────────────────────── */
+@media (max-width:900px){
+  :root{--rail:290px}
+  .ed{--ed-pad:20px; padding:32px var(--ed-pad) 130px}
+  .spec{padding:30px 22px 130px; gap:34px}
+}
+@media (max-width:720px){
+  .topbar{padding:0 12px; gap:10px}
+  .brand a{display:none}
+  .seg button{padding-inline:9px}
+  #compareBtn{display:none}
+  .stage{padding:4px 8px 0}
+  body[data-compare="on"] .stage{flex-direction:column; gap:12px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important; transition-duration:.01ms !important}
+}
+</style>
+
+
+<style>
+/* ── dock: the only controls, floating over the table ──────── */
+.dock{
+  position:fixed; z-index:80; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+  display:flex; align-items:center; gap:10px; padding:8px;
+  background:var(--raised); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow);
+  max-width:calc(100vw - 24px);
+}
+.dock .lab{font-family:var(--mono); font-stretch:85%; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-mid); padding-inline-start:4px}
+.dock .div{width:1px; align-self:stretch; background:var(--line-soft); margin-inline:2px}
+.dock .slotbox{width:220px}
+.dock .combo .field-in{padding:8px 10px; border-radius:8px}
+.dock .pop{top:auto; bottom:calc(100% + 10px); width:340px; right:auto}
+.dock .seg{margin:0}
+.pairseg button{display:inline-flex; align-items:center; gap:6px; font-weight:600}
+.pairseg i{width:7px; height:7px; border-radius:50%; display:block}
+body:not([data-compare="on"]) .pairseg{display:none}
+.dockbtn{
+  display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); background:transparent;
+  color:var(--fg); border-radius:8px; padding:8px 13px; font-size:13px; white-space:nowrap;
+  transition:scale .15s cubic-bezier(0.2, 0, 0, 1), background-color .13s, border-color .13s;
+}
+.dockbtn:hover{border-color:var(--fg-mid)}
+.dockbtn:active,.btn:active{scale:.96}
+.dockbtn.primary{background:var(--fg); color:var(--raised); border-color:var(--fg)}
+.dockbtn.primary:hover{background:var(--solid-hover)}
+.dockbtn[aria-expanded="true"]{background:var(--bg-sunk); border-color:var(--fg-mid)}
+.dockbtn svg{width:14px; height:14px; flex:0 0 auto}
+
+/* ── adjust: everything that is not a face pick ────────────── */
+.adjust{
+  position:fixed; z-index:79; left:50%; bottom:calc(92px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+  width:min(580px, calc(100vw - 24px)); max-height:calc(100dvh - 170px); overflow-y:auto; overscroll-behavior:contain;
+  background:var(--raised); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
+  padding:14px 18px 16px; display:grid; grid-template-columns:1fr 1fr; gap:14px 26px;
+}
+.adjust[hidden]{display:none}
+.adjust{position:fixed}
+.adjust > header{grid-column:1 / -1; display:flex; align-items:center; gap:8px; min-height:32px; margin-bottom:-4px}
+body:not([data-compare="on"]) .adjust > header{position:absolute; top:10px; right:12px; min-height:0; margin:0}
+.adjust > header .who{display:none; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--accent-cur)}
+.adjust > header .who i{width:7px; height:7px; border-radius:50%; background:var(--accent-cur)}
+body[data-compare="on"] .adjust > header .who{display:inline-flex}
+.adjust > header .x{margin-inline-start:auto}
+.adjtabs{display:none}
+.adjust .sec{display:flex; flex-direction:column; gap:11px; min-width:0}
+.adjust .sec > h4{margin:0 0 2px; font-family:var(--mono); font-stretch:85%; font-size:10.5px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--fg)}
+.adjust .sec[data-sec="scale"]{grid-column:1 / -1; display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 20px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.adjust .sec[data-sec="scale"] > h4{grid-column:1 / -1}
+.adjust .sec[data-sec="scale"] .val{white-space:nowrap}
+.adjust > footer{grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.adjust > footer .field{width:200px}
+.adjust > footer .sp{flex:1}
+.adjust .customs{grid-column:1 / -1; display:flex; flex-direction:column; gap:6px}
+
+/* ── picker: all fonts / pairings ──────────────────────────── */
+.ptabs{display:flex; gap:2px; padding:6px 6px 0; border-bottom:1px solid var(--line-soft)}
+.ptabs button{flex:1; border:0; background:transparent; padding:8px 8px 9px; font-size:12.5px; color:var(--fg-mid); border-bottom:2px solid transparent; margin-bottom:-1px}
+.ptabs button[aria-pressed="true"]{color:var(--fg); border-bottom-color:var(--fg); font-weight:600}
+.pop[data-tab="pairs"] > :is(.search, .filters, ul.fonts){display:none}
+.pop:not([data-tab="pairs"]) > .plist{display:none}
+.plist{list-style:none; margin:0; padding:4px; max-height:340px; overflow-y:auto}
+.plist li{display:grid; grid-template-columns:1fr auto; gap:1px 12px; padding:9px 10px; border-radius:7px; cursor:pointer}
+.plist li:hover,.plist li.cursor{background:var(--bg-sunk)}
+.plist b{font-size:17px; font-weight:600; color:var(--fg); line-height:1.2}
+.plist span{grid-column:1; font-size:13px; color:var(--fg-mid)}
+.plist small{grid-column:2; grid-row:1 / span 2; align-self:center; font-family:var(--mono); font-stretch:85%; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-dim)}
+
+/* ── share sheet ───────────────────────────────────────────── */
+.share{display:flex; flex-direction:column; min-height:0; flex:1 1 auto; overflow:auto}
+.share .row{padding:16px 16px 6px; display:flex; flex-direction:column; gap:10px}
+.share .lead{margin:0; font-size:13.5px; color:var(--fg-mid)}
+.share .linkrow{display:flex; gap:8px}
+.share .linkrow input{flex:1; min-width:0; font-family:var(--mono); font-size:11.5px}
+.share h4{margin:14px 16px 8px; font-family:var(--mono); font-stretch:85%; font-size:10.5px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--fg)}
+.share pre{flex:0 0 auto; max-height:38dvh}
+.share .fine{margin:0; padding:10px 16px 14px; font-size:12px; color:var(--fg-dim)}
+
+/* ── phone ─────────────────────────────────────────────────── */
+@media (max-width:720px){
+  .dock{left:8px; right:8px; transform:none; max-width:none; bottom:calc(8px + env(safe-area-inset-bottom)); gap:6px; padding:6px; border-radius:14px}
+  .dock .lab,.dock .div,.dockbtn span{display:none}
+  .dock .slotbox{width:auto; flex:1 1 0; min-width:0}
+  .dock .combo .cat{display:none}
+  .dockbtn{padding:10px 11px}
+  .dock .pop{position:fixed; left:8px; right:8px; width:auto; bottom:calc(72px + env(safe-area-inset-bottom))}
+  .dock .pairseg button{padding-inline:8px}
+  .adjust{left:8px; right:8px; width:auto; transform:none; bottom:calc(72px + env(safe-area-inset-bottom)); max-height:46dvh; grid-template-columns:1fr; padding:10px 14px 14px; gap:12px}
+  .adjtabs{display:flex; gap:2px; grid-column:1 / -1; padding-inline-end:44px}
+  .adjtabs button{flex:1; border:0; background:transparent; padding:7px 4px 8px; font-size:13px; color:var(--fg-mid); border-bottom:2px solid transparent}
+  .adjtabs button[aria-pressed="true"]{color:var(--fg); border-bottom-color:var(--fg); font-weight:600}
+  .adjust .sec{display:none}
+  .adjust[data-sec="dsp"] .sec[data-sec="dsp"],.adjust[data-sec="bod"] .sec[data-sec="bod"]{display:flex}
+  .adjust .sec[data-sec="scale"]{display:none; grid-template-columns:1fr; padding-top:0; border-top:0}
+  .adjust[data-sec="scale"] .sec[data-sec="scale"]{display:grid}
+  .adjust .sec > h4{display:none}
+  .adjust > footer{display:none}
+  .adjust[data-sec="scale"] > footer{display:flex}
+  .adjust > footer .field{width:100%}
+  input[type=text], select{font-size:16px}
+}
+@media (max-width:400px){
+  .topbar{flex-wrap:wrap; height:auto; padding-block:8px; row-gap:8px}
+  .topbar .seg[aria-label="View"]{order:3; width:100%}
+  .topbar .seg[aria-label="View"] button{flex:1}
+}
+</style>
+<style id="panestyle"></style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><b>Type Check</b><a href="https://sebasjavela.framer.website" target="_blank" rel="noopener">by Sebastian Javela</a></div>
+
+    <div class="seg" role="group" aria-label="View">
+      <button data-view="editorial" aria-pressed="true">Editorial</button>
+      <button data-view="mobile" aria-pressed="false">Mobile</button>
+      <button data-view="specimen" aria-pressed="false">Specimen</button>
+    </div>
+
+    <span class="spacer"></span>
+
+    <button class="btn" id="compareBtn" aria-pressed="false" title="Show pairs A and B side by side (C)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1"/><rect x="9" y="2.5" width="5.5" height="11" rx="1"/></svg>
+      Compare
+    </button>
+
+    <div class="seg hide-sm" role="group" aria-label="Sheet">
+      <button id="groundLight" data-ground="light" aria-pressed="true">Paper</button>
+      <button id="groundDark" data-ground="dark" aria-pressed="false">Ink</button>
+    </div>
+
+    <button class="btn" id="shareBtn" title="Share link and CSS">Share</button>
+  </header>
+
+  <main class="main">
+
+    <div class="stage" id="stage">
+      <section class="pane" data-pair="a" data-ground="light" id="pane-a" tabindex="-1" aria-label="Pair A preview"></section>
+      <section class="pane" data-pair="b" data-ground="light" id="pane-b" tabindex="-1" aria-label="Pair B preview"></section>
+    </div>
+  </main>
+</div>
+
+<div class="drop" aria-hidden="true">
+  <div class="card">
+    <b>Drop a font file to load it</b>
+    <span>.woff2, .woff, .otf or .ttf. Your font files never leave this browser. Variable files keep their axes where the format allows.</span>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="box">
+    <header>
+      <b id="sheetTitle">Untitled</b>
+      <span class="sub" id="sheetSub"></span>
+      <span class="spacer"></span>
+      <button class="btn icon" id="sheetClose" aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+    <div id="sheetBody" style="overflow:auto;flex:1 1 auto;min-height:0;display:flex;flex-direction:column"></div>
+  </div>
+</div>
+
+<div class="dock" role="toolbar" aria-label="Pair controls">
+  <div class="seg pairseg" role="group" aria-label="Sheet being edited">
+    <button data-p="a" aria-pressed="true"><i style="background:var(--a)"></i>A</button>
+    <button data-p="b" aria-pressed="false"><i style="background:var(--b)"></i>B</button>
+  </div>
+  <span class="lab" aria-hidden="true">Display</span><div class="slotbox" id="slotDsp"></div>
+  <span class="lab" aria-hidden="true">Text</span><div class="slotbox" id="slotBod"></div>
+  <span class="div"></span>
+  <button class="dockbtn" id="adjBtn" aria-expanded="false" aria-controls="adjust" aria-label="Adjust" title="Weight, tracking, leading, scale"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4h7M12 4h2M2 12h2M7 12h7"/><circle cx="10.5" cy="4" r="1.5"/><circle cx="5.5" cy="12" r="1.5"/></svg><span>Adjust</span></button>
+  <button class="dockbtn primary" id="shuffleBtn" aria-label="Shuffle" title="Random pairing, weighted toward workable matches (S)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5"/><circle cx="5.5" cy="5.5" r=".9" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/></svg><span>Shuffle</span></button>
+</div>
+
+<div class="adjust" id="adjust" role="region" aria-label="Adjust the pair" data-sec="dsp" hidden>
+  <header>
+    <span class="who"><i></i><span id="adjWho">Pair A</span></span>
+    <button class="btn icon x" id="adjClose" aria-label="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </header>
+  <div class="adjtabs" role="group" aria-label="Section">
+    <button type="button" data-sec="dsp" aria-pressed="true">Display</button>
+    <button type="button" data-sec="bod" aria-pressed="false">Text</button>
+    <button type="button" data-sec="scale" aria-pressed="false">Scale</button>
+  </div>
+  <section class="sec" data-sec="dsp" id="secDsp"></section>
+  <section class="sec" data-sec="bod" id="secBod"></section>
+  <section class="sec" data-sec="scale" id="secScale"></section>
+  <footer id="adjFoot"></footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const GF = {"cats":["Sans Serif","Serif","Display","Monospace","Handwriting"],"axisNames":{"ARRR":"AR Retinal Resolution","BLED":"Bleed","BNCE":"Bounce","CASL":"Casual","CRSV":"Cursive","CTRS":"Contrast","EDPT":"Extrusion Depth","EHLT":"Edge Highlight","ELGR":"Element Grid","ELSH":"Element Shape","ELXP":"Element Expansion","FLAR":"Flare","GRAD":"Grade","HEXP":"Hyper Expansion","INFM":"Informality","MONO":"Monospace","MORF":"Morph","ROND":"Roundness","SCAN":"Scanlines","SHLN":"Shadow Length","SHRP":"Sharpness","SOFT":"Softness","SPAC":"Spacing","SZP1":"Size of Paint 1","SZP2":"Size of Paint 2","VOLM":"Volume","WONK":"Wonky","XELA":"Horizontal Element Alignment","XOPQ":"Thick Stroke","XPN1":"Horizontal Position of Paint 1","XPN2":"Horizontal Position of Paint 2","XROT":"Rotation in X","XTRA":"Counter Width","YEAR":"Year","YELA":"Vertical Element Alignment","YOPQ":"Thin Stroke","YPN1":"Vertical Position of Paint 1","YPN2":"Vertical Position of Paint 2","YROT":"Rotation in Y","YTAS":"Ascender Height","YTDE":"Descender Depth","YTFI":"Figure Height","YTLC":"Lowercase Height","YTUC":"Uppercase Height","opsz":"Optical Size","slnt":"Slant","wdth":"Width","wght":"Weight"},"fonts":[["Roboto",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",75,100,100],["wght",100,900,400]],0],["Open Sans",0,[300,400,500,600,700,800],1,[["wdth",75,100,100],["wght",300,800,400]],1],["Google Sans",0,[400,500,600,700],1,[["GRAD",-50,200,0],["opsz",17,18,18],["wght",400,700,400]],2],["Inter",0,[100,200,300,400,500,600,700,800,900],1,[["opsz",14,32,14],["wght",100,900,400]],3],["Montserrat",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],4],["Poppins",0,[100,200,300,400,500,600,700,800,900],1,[],5],["Lato",0,[100,300,400,700,900],1,[],6],["Arimo",0,[400,500,600,700],1,[["wght",400,700,400]],7],["Roboto Mono",3,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],8],["Roboto Condensed",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],9],["Oswald",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],10],["Noto Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",62.5,100,100],["wght",100,900,400]],11],["DM Sans",0,[100,200,300,400,500,600,700,800,900,1000],1,[["opsz",9,40,14],["wght",100,1000,400]],12],["Nunito",0,[200,300,400,500,600,700,800,900,1000],1,[["wght",200,1000,400]],13],["Raleway",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],14],["Nunito Sans",0,[200,300,400,500,600,700,800,900,1000],1,[["YTLC",440,540,500],["opsz",6,12,12],["wdth",75,125,100],["wght",200,1000,400]],15],["Playfair Display",1,[400,500,600,700,800,900],1,[["wght",400,900,400]],16],["Roboto Slab",1,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],17],["Rubik",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],18],["Kanit",0,[100,200,300,400,500,600,700,800,900],1,[],19],["Ubuntu",0,[300,400,500,700],1,[],20],["Outfit",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],21],["Manrope",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],22],["Archivo Black",0,[400],0,[],23],["Merriweather",1,[300,400,500,600,700,800,900],1,[["opsz",18,144,18],["wdth",87,112,100],["wght",300,900,400]],24],["Work Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],25],["Lora",1,[400,500,600,700],1,[["wght",400,700,400]],26],["Plus Jakarta Sans",0,[200,300,400,500,600,700,800],1,[["wght",200,800,400]],27],["Quicksand",0,[300,400,500,600,700],0,[["wght",300,700,400]],28],["PT Sans",0,[400,700],1,[],29],["Figtree",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],30],["Bebas Neue",0,[400],0,[],31],["Mulish",0,[200,300,400,500,600,700,800,900,1000],1,[["wght",200,1000,400]],32],["Barlow",0,[100,200,300,400,500,600,700,800,900],1,[],33],["Source Sans 3",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],34],["Bricolage Grotesque",0,[200,300,400,500,600,700,800],0,[["opsz",12,96,14],["wdth",75,100,100],["wght",200,800,400]],35],["Prompt",0,[100,200,300,400,500,600,700,800,900],1,[],36],["Archivo",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",62,125,100],["wght",100,900,400]],37],["IBM Plex Sans",0,[100,200,300,400,500,600,700],1,[["wdth",75,100,100],["wght",100,700,400]],38],["Saira",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",50,125,100],["wght",100,900,400]],39],["JetBrains Mono",3,[100,200,300,400,500,600,700,800],1,[["wght",100,800,400]],40],["Inconsolata",3,[200,300,400,500,600,700,800,900],0,[["wdth",50,200,100],["wght",200,900,400]],41],["Jost",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],42],["Black Ops One",2,[400],0,[],43],["Karla",0,[200,300,400,500,600,700,800],1,[["wght",200,800,400]],44],["Fira Sans",0,[100,200,300,400,500,600,700,800,900],1,[],45],["Share Tech",0,[400],0,[],46],["Smooch Sans",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],47],["Noto Serif",1,[100,200,300,400,500,600,700,800,900],1,[["wdth",62.5,100,100],["wght",100,900,400]],48],["Titillium Web",0,[200,300,400,600,700,900],1,[],49],["Space Grotesk",0,[300,400,500,600,700],0,[["wght",300,700,400]],50],["Libre Baskerville",1,[400,500,600,700],1,[["wght",400,700,400]],51],["PT Serif",1,[400,700],1,[],52],["Heebo",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],53],["Google Sans Flex",0,[1,100,200,300,400,500,600,700,800,900,1000],0,[["GRAD",0,100,0],["ROND",0,100,0],["opsz",6,144,18],["slnt",-10,0,0],["wdth",25,151,100],["wght",1,1000,400]],54],["Cormorant Garamond",1,[300,400,500,600,700],1,[["wght",300,700,400]],55],["Fjalla One",0,[400],0,[],56],["Source Code Pro",3,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],57],["Fraunces",1,[100,200,300,400,500,600,700,800,900],1,[["SOFT",0,100,0],["WONK",0,1,0],["opsz",9,144,14],["wght",100,900,400]],58],["Lobster Two",2,[400,700],1,[],59],["Dancing Script",4,[400,500,600,700],0,[["wght",400,700,400]],60],["Anton",0,[400],0,[],61],["Barlow Condensed",0,[100,200,300,400,500,600,700,800,900],1,[],62],["Libre Franklin",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],63],["Lexend",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],64],["EB Garamond",1,[400,500,600,700,800],1,[["wght",400,800,400]],65],["Sora",0,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],66],["Public Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],67],["Josefin Sans",0,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],68],["IBM Plex Mono",3,[100,200,300,400,500,600,700],1,[],69],["Instrument Serif",1,[400],1,[],70],["Inter Tight",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],71],["Changa One",2,[400],1,[],72],["Cairo",0,[200,300,400,500,600,700,800,900,1000],0,[["slnt",-11,11,0],["wght",200,1000,400]],73],["Bitter",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],74],["Assistant",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],75],["Schibsted Grotesk",0,[400,500,600,700,800,900],1,[["wght",400,900,400]],76],["Urbanist",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],77],["Cabin",0,[400,500,600,700],1,[["wdth",75,100,100],["wght",400,700,400]],78],["Nanum Gothic",0,[400,700,800],0,[],79],["Alfa Slab One",2,[400],0,[],80],["Hind Siliguri",0,[300,400,500,600,700],0,[],81],["Roboto Flex",0,[100,200,300,400,500,600,700,800,900,1000],0,[["GRAD",-200,150,0],["XOPQ",27,175,96],["XTRA",323,603,468],["YOPQ",25,135,79],["YTAS",649,854,750],["YTDE",-305,-98,-203],["YTFI",560,788,738],["YTLC",416,570,514],["YTUC",528,760,712],["opsz",8,144,14],["slnt",-10,0,0],["wdth",25,151,100],["wght",100,1000,400]],82],["Dosis",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],83],["DM Serif Display",1,[400],1,[],84],["M PLUS Rounded 1c",0,[100,300,400,500,700,800,900],0,[],85],["Mukta",0,[200,300,400,500,600,700,800],0,[],86],["Red Hat Display",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],87],["Rajdhani",0,[300,400,500,600,700],0,[],88],["Lilita One",2,[400],0,[],89],["Caveat",4,[400,500,600,700],0,[["wght",400,700,400]],90],["Exo 2",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],91],["Fredoka",0,[300,400,500,600,700],0,[["wdth",75,125,100],["wght",300,700,400]],92],["Instrument Sans",0,[400,500,600,700],1,[["wdth",75,100,100],["wght",400,700,400]],93],["Orbitron",0,[400,500,600,700,800,900],0,[["wght",400,900,400]],94],["Geist",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],95],["Hind",0,[300,400,500,600,700],0,[],96],["Source Serif 4",1,[200,300,400,500,600,700,800,900],1,[["opsz",8,60,14],["wght",200,900,400]],97],["Oxygen",0,[300,400,700],0,[],98],["Ramabhadra",0,[400],0,[],99],["Crimson Text",1,[400,600,700],1,[],100],["Anek Telugu",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],101],["Bungee",2,[400],0,[],102],["Overpass",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],103],["Tajawal",0,[200,300,400,500,700,800,900],0,[],104],["Slabo 27px",1,[400],0,[],105],["Cinzel",1,[400,500,600,700,800,900],0,[["wght",400,900,400]],106],["Pacifico",4,[400],0,[],107],["Barlow Semi Condensed",0,[100,200,300,400,500,600,700,800,900],1,[],108],["Newsreader",1,[200,300,400,500,600,700,800],1,[["opsz",6,72,16],["wght",200,800,400]],109],["Merriweather Sans",0,[300,400,500,600,700,800],1,[["wght",300,800,400]],110],["PT Sans Narrow",0,[400,700],0,[],111],["Zeyada",4,[400],0,[],112],["Lobster",2,[400],0,[],113],["M PLUS 1p",0,[100,300,400,500,700,800,900],0,[],114],["Domine",1,[400,500,600,700],0,[["wght",400,700,400]],115],["Arvo",1,[400,700],1,[],116],["Comfortaa",2,[300,400,500,600,700],0,[["wght",300,700,400]],117],["Teko",0,[300,400,500,600,700],0,[["wght",300,700,400]],118],["Abel",0,[400],0,[],119],["Gravitas One",2,[400],0,[],120],["Hanken Grotesk",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],121],["Asap",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",100,900,400]],122],["Bodoni Moda",1,[400,500,600,700,800,900],1,[["opsz",6,96,11],["wght",400,900,400]],123],["DM Mono",3,[300,400,500],1,[],124],["Rethink Sans",0,[400,500,600,700,800],1,[["wght",400,800,400]],125],["Geist Mono",3,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],126],["Maven Pro",0,[400,500,600,700,800,900],0,[["wght",400,900,400]],127],["Lexend Deca",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],128],["ABeeZee",0,[400],1,[],129],["Shadows Into Light",4,[400],0,[],130],["Space Mono",3,[400,700],1,[],131],["Chakra Petch",0,[300,400,500,600,700],1,[],132],["Play",0,[400,700],0,[],133],["Zen Kaku Gothic New",0,[300,400,500,700,900],0,[],134],["Questrial",0,[400],0,[],135],["Abril Fatface",2,[400],0,[],136],["Satisfy",4,[400],0,[],137],["Zilla Slab",1,[300,400,500,600,700],1,[],138],["Archivo Narrow",0,[400,500,600,700],1,[["wght",400,700,400]],139],["Alumni Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],140],["Albert Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],141],["Epilogue",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],142],["Almarai",0,[300,400,700,800],0,[],143],["Exo",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],144],["Be Vietnam Pro",0,[100,200,300,400,500,600,700,800,900],1,[],145],["League Spartan",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],146],["IBM Plex Serif",1,[100,200,300,400,500,600,700],1,[],147],["Great Vibes",4,[400],0,[],148],["Marcellus",1,[400],0,[],149],["Varela Round",0,[400],0,[],150],["Syne",0,[400,500,600,700,800],0,[["wght",400,800,400]],151],["Spectral",1,[200,300,400,500,600,700,800],1,[],152],["Cormorant",1,[300,400,500,600,700],1,[["wght",300,700,400]],153],["Onest",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],154],["Crimson Pro",1,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],155],["Indie Flower",4,[400],0,[],156],["Sanchez",1,[400],1,[],157],["Sofia Sans",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],158],["Saira Condensed",0,[100,200,300,400,500,600,700,800,900],0,[],159],["Unbounded",0,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],160],["Permanent Marker",4,[400],0,[],161],["Nanum Myeongjo",1,[400,700,800],0,[],162],["Oleo Script",2,[400,700],0,[],163],["Atkinson Hyperlegible",0,[400,700],1,[],164],["Titan One",2,[400],0,[],165],["Zen Maru Gothic",0,[300,400,500,700,900],0,[],166],["IBM Plex Sans Arabic",0,[100,200,300,400,500,600,700],0,[],167],["Geologica",0,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0],["SHRP",0,100,0],["slnt",-12,0,0],["wght",100,900,400]],168],["Frank Ruhl Libre",1,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],169],["Courier Prime",3,[400,700],1,[],170],["Roboto Serif",1,[100,200,300,400,500,600,700,800,900],1,[["GRAD",-50,100,0],["opsz",8,144,14],["wdth",50,150,100],["wght",100,900,400]],171],["Sarabun",0,[100,200,300,400,500,600,700,800],1,[],172],["Kalam",4,[300,400,700],0,[],173],["Luckiest Guy",2,[400],0,[],174],["Signika",0,[300,400,500,600,700],0,[["GRAD",-30,0,0],["wght",300,700,400]],175],["Vollkorn",1,[400,500,600,700,800,900],1,[["wght",400,900,400]],176],["Red Hat Text",0,[300,400,500,600,700],1,[["wght",300,700,400]],177],["Baloo 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],178],["Viga",0,[400],0,[],179],["LINE Seed JP",0,[100,400,700,800],0,[],180],["Literata",1,[200,300,400,500,600,700,800,900],1,[["opsz",7,72,14],["wght",200,900,400]],181],["Delius",4,[400],0,[],182],["Russo One",0,[400],0,[],183],["Righteous",2,[400],0,[],184],["Amiri",1,[400,700],1,[],185],["Catamaran",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],186],["Encode Sans",0,[100,200,300,400,500,600,700,800,900],0,[["wdth",75,125,100],["wght",100,900,400]],187],["Andada Pro",1,[400,500,600,700,800],1,[["wght",400,840,400]],188],["Press Start 2P",2,[400],0,[],189],["Alegreya Sans",0,[100,300,400,500,700,800,900],1,[],190],["Fira Code",3,[300,400,500,600,700],0,[["wght",300,700,400]],191],["Chivo",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],192],["Fira Sans Condensed",0,[100,200,300,400,500,600,700,800,900],1,[],193],["Cardo",1,[400,700],1,[],194],["Yellowtail",4,[400],0,[],195],["Montserrat Alternates",0,[100,200,300,400,500,600,700,800,900],1,[],196],["Bree Serif",1,[400],0,[],197],["News Cycle",0,[400,700],0,[],198],["Baskervville",1,[400,500,600,700],1,[["wght",400,700,400]],199],["Yanone Kaffeesatz",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],200],["DM Serif Text",1,[400],1,[],201],["Aleo",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],202],["Libre Barcode 39",2,[400],0,[],203],["Prata",1,[400],0,[],204],["Tinos",1,[400,700],1,[],205],["Playfair",1,[300,400,500,600,700,800,900],1,[["opsz",5,1200,14],["wdth",87.5,112.5,100],["wght",300,900,400]],206],["Noto Sans Display",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",62.5,100,100],["wght",100,900,400]],207],["IBM Plex Sans Condensed",0,[100,200,300,400,500,600,700],1,[],208],["Shippori Mincho",1,[400,500,600,700,800],0,[],209],["Kumbh Sans",0,[100,200,300,400,500,600,700,800,900],0,[["YOPQ",40,300,300],["wght",100,900,400]],210],["Readex Pro",0,[200,300,400,500,600,700],0,[["HEXP",0,100,0],["wght",160,700,400]],211],["Gothic A1",0,[100,200,300,400,500,600,700,800,900],0,[],212],["Hind Madurai",0,[300,400,500,600,700],0,[],213],["Crete Round",1,[400],1,[],214],["Rowdies",2,[300,400,700],0,[],215],["Acme",0,[400],0,[],216],["Amatic SC",4,[400,700],0,[],217],["Changa",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],218],["Asap Condensed",0,[200,300,400,500,600,700,800,900],1,[],219],["Alata",0,[400],0,[],220],["Alegreya",1,[400,500,600,700,800,900],1,[["wght",400,900,400]],221],["Hammersmith One",0,[400],0,[],222],["Allura",4,[400],0,[],223],["Antic Slab",1,[400],0,[],224],["Sawarabi Mincho",1,[400],0,[],225],["Creepster",2,[400],0,[],226],["Patua One",2,[400],0,[],227],["Old Standard TT",1,[400,700],1,[],228],["Kaushan Script",4,[400],0,[],229],["Tenor Sans",0,[400],0,[],230],["Paytone One",0,[400],0,[],231],["Khand",0,[300,400,500,600,700],0,[],232],["Bangers",2,[400],0,[],233],["Patrick Hand",4,[400],0,[],234],["Golos Text",0,[400,500,600,700,800,900],0,[["wght",400,900,400]],235],["Special Elite",2,[400],0,[],236],["Chelsea Market",2,[400],0,[],237],["Fugaz One",2,[400],0,[],238],["Share Tech Mono",3,[400],0,[],239],["Libre Caslon Text",1,[400,700],1,[],240],["PT Mono",3,[400],0,[],241],["Advent Pro",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",100,200,100],["wght",100,900,400]],242],["Comic Neue",4,[300,400,700],1,[],243],["Courgette",4,[400],0,[],244],["Cantarell",0,[400,700],1,[],245],["VT323",3,[400],0,[],246],["Sacramento",4,[400],0,[],247],["PT Sans Caption",0,[400,700],0,[],248],["Noticia Text",1,[400,700],1,[],249],["Sawarabi Gothic",0,[400],0,[],250],["STIX Two Text",1,[400,500,600,700],1,[["wght",400,700,400]],251],["Sen",0,[400,500,600,700,800],0,[["wght",400,800,400]],252],["Noto Sans Mono",0,[100,200,300,400,500,600,700,800,900],0,[["wdth",62.5,100,100],["wght",100,900,400]],253],["Alexandria",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],254],["Antonio",0,[100,200,300,400,500,600,700],0,[["wght",100,700,400]],255],["BIZ UDPGothic",0,[400,700],0,[],256],["Oxanium",2,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],257],["Rubik Mono One",0,[400],0,[],258],["Lexend Giga",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],259],["Zen Old Mincho",1,[400,500,600,700,900],0,[],260],["Martel",1,[200,300,400,600,700,800,900],0,[],261],["Google Sans Code",3,[300,400,500,600,700,800],1,[["MONO",0,1,1],["wght",300,800,400]],262],["League Gothic",0,[400],0,[["wdth",75,100,100]],263],["Nanum Gothic Coding",4,[400,700],0,[],264],["Commissioner",0,[100,200,300,400,500,600,700,800,900],0,[["FLAR",0,100,0],["VOLM",0,100,0],["slnt",-12,0,0],["wght",100,900,400]],265],["Quattrocento",1,[400,700],0,[],266],["Philosopher",0,[400,700],1,[],267],["Passion One",2,[400,700,900],0,[],268],["Francois One",0,[400],0,[],269],["Sofia Sans Condensed",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],270],["Didact Gothic",0,[400],0,[],271],["Yantramanav",0,[100,300,400,500,700,900],0,[],272],["Rokkitt",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],273],["Quantico",0,[400,700],1,[],274],["Actor",0,[400],0,[],275],["Gilda Display",1,[400],0,[],276],["Rock Salt",4,[400],0,[],277],["Faustina",1,[300,400,500,600,700,800],1,[["wght",300,800,400]],278],["Cutive Mono",3,[400],0,[],279],["Neuton",1,[200,300,400,700,800],1,[],280],["Josefin Slab",1,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],281],["Audiowide",2,[400],0,[],282],["Ubuntu Condensed",0,[400],0,[],283],["Vazirmatn",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],284],["Kosugi Maru",0,[400],0,[],285],["Blinker",0,[100,200,300,400,600,700,800,900],0,[],286],["Eczar",1,[400,500,600,700,800],0,[["wght",400,800,400]],287],["Architects Daughter",4,[400],0,[],288],["Damion",4,[400],0,[],289],["Signika Negative",0,[300,400,500,600,700],0,[["wght",300,700,400]],290],["Gloria Hallelujah",4,[400],0,[],291],["Biryani",0,[200,300,400,600,700,800,900],0,[],292],["Bai Jamjuree",0,[200,300,400,500,600,700],1,[],293],["Gruppo",0,[400],0,[],294],["Encode Sans Condensed",0,[100,200,300,400,500,600,700,800,900],0,[],295],["Unna",1,[400,700],1,[],296],["Playfair Display SC",1,[400,700,900],1,[],297],["Cookie",4,[400],0,[],298],["Jura",0,[300,400,500,600,700],0,[["wght",300,700,400]],299],["Host Grotesk",0,[300,400,500,600,700,800],1,[["wght",300,800,400]],300],["Amaranth",0,[400,700],1,[],301],["Radio Canada",0,[300,400,500,600,700],1,[["wdth",75,100,100],["wght",300,700,400]],302],["Forum",2,[400],0,[],303],["Quattrocento Sans",0,[400,700],1,[],304],["Tangerine",4,[400,700],0,[],305],["Dela Gothic One",2,[400],0,[],306],["Alex Brush",4,[400],0,[],307],["Staatliches",2,[400],0,[],308],["Krub",0,[200,300,400,500,600,700],1,[],309],["Pinyon Script",4,[400],0,[],310],["Homemade Apple",4,[400],0,[],311],["Italianno",4,[400],0,[],312],["Concert One",2,[400],0,[],313],["Poiret One",2,[400],0,[],314],["Rammetto One",2,[400],0,[],315],["Gabarito",2,[400,500,600,700,800,900],0,[["wght",400,900,400]],316],["Istok Web",0,[400,700],1,[],317],["Berkshire Swash",4,[400],0,[],318],["Pathway Gothic One",0,[400],0,[],319],["Yeseva One",2,[400],0,[],320],["Playball",2,[400],0,[],321],["M PLUS 1",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],322],["Lustria",1,[400],0,[],323],["Monoton",2,[400],0,[],324],["Caveat Brush",4,[400],0,[],325],["Lalezar",0,[400],0,[],326],["Gelasio",1,[400,500,600,700],1,[["wght",400,700,400]],327],["Abhaya Libre",1,[400,500,600,700,800],0,[],328],["El Messiri",0,[400,500,600,700],0,[["wght",400,700,400]],329],["Cinzel Decorative",2,[400,700,900],0,[],330],["Lusitana",1,[400,700],0,[],331],["Hind Guntur",0,[300,400,500,600,700],0,[],332],["Chango",2,[400],0,[],333],["Goldman",2,[400,700],0,[],334],["Eater",2,[400],0,[],335],["Libre Bodoni",1,[400,500,600,700],1,[["wght",400,700,400]],336],["Comic Relief",2,[400,700],0,[],337],["Nanum Pen Script",4,[400],0,[],338],["Petrona",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],339],["Unica One",2,[400],0,[],340],["GFS Didot",1,[400],0,[],341],["Ubuntu Mono",3,[400,700],1,[],342],["Mitr",0,[200,300,400,500,600,700],0,[],343],["Reenie Beanie",4,[400],0,[],344],["Andika",0,[400,700],1,[],345],["Monda",0,[400,500,600,700],0,[["wght",400,700,400]],346],["Merienda",4,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],347],["Parisienne",4,[400],0,[],348],["Black Han Sans",0,[400],0,[],349],["Nothing You Could Do",4,[400],0,[],350],["Sorts Mill Goudy",1,[400],1,[],351],["Belleza",0,[400],0,[],352],["Anek Latin",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],353],["Anonymous Pro",3,[400,700],1,[],354],["Cormorant Infant",1,[300,400,500,600,700],1,[["wght",300,700,400]],355],["Arsenal",0,[400,700],1,[],356],["M PLUS U",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],357],["Radio Canada Big",0,[400,500,600,700],1,[["wght",400,700,400]],358],["Ubuntu Sans",0,[100,200,300,400,500,600,700,800],1,[["wdth",75,100,100],["wght",100,800,400]],359],["Vidaloka",1,[400],0,[],360],["IBM Plex Sans Thai",0,[100,200,300,400,500,600,700],0,[],361],["Syncopate",0,[400,700],0,[],362],["Volkhov",1,[400,700],1,[],363],["Ropa Sans",0,[400],1,[],364],["Fira Mono",3,[400,500,700],0,[],365],["Michroma",0,[400],0,[],366],["Carlito",0,[400,700],1,[],367],["Sriracha",4,[400],0,[],368],["Georama",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",62.5,150,100],["wght",100,900,400]],369],["Handlee",4,[400],0,[],370],["Noto Serif Display",1,[100,200,300,400,500,600,700,800,900],1,[["wdth",62.5,100,100],["wght",100,900,400]],371],["Saira Extra Condensed",0,[100,200,300,400,500,600,700,800,900],0,[],372],["Afacad",0,[400,500,600,700],1,[["wght",400,700,400]],373],["Hind Vadodara",0,[300,400,500,600,700],0,[],374],["Saira Semi Condensed",0,[100,200,300,400,500,600,700,800,900],0,[],375],["Sofia Sans Extra Condensed",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],376],["Cousine",3,[400,700],1,[],377],["Calistoga",2,[400],0,[],378],["Mada",0,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],379],["Cuprum",0,[400,500,600,700],1,[["wght",400,700,400]],380],["Bad Script",4,[400],0,[],381],["Pragati Narrow",0,[400,700],0,[],382],["Mr Dafoe",4,[400],0,[],383],["Besley",1,[400,500,600,700,800,900],1,[["wght",400,900,400]],384],["Shippori Mincho B1",1,[400,500,600,700,800],0,[],385],["Mona Sans",0,[200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",200,900,400]],386],["Skranji",2,[400,700],0,[],387],["Varela",0,[400],0,[],388],["REM",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],389],["Caprasimo",2,[400],0,[],390],["Noto Sans Symbols",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],391],["Limelight",2,[400],0,[],392],["Six Caps",0,[400],0,[],393],["Mandali",0,[400],0,[],394],["Fira Sans Extra Condensed",0,[100,200,300,400,500,600,700,800,900],1,[],395],["Gochi Hand",4,[400],0,[],396],["Averia Serif Libre",2,[300,400,700],1,[],397],["Dongle",0,[300,400,700],0,[],398],["Mrs Saint Delafield",4,[400],0,[],399],["Suez One",1,[400],0,[],400],["Zen Kaku Gothic Antique",0,[300,400,500,700,900],0,[],401],["Racing Sans One",2,[400],0,[],402],["Ms Madi",4,[400],0,[],403],["Reddit Sans",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],404],["Jua",0,[400],0,[],405],["Amita",4,[400,700],0,[],406],["Squada One",2,[400],0,[],407],["Arapey",1,[400],1,[],408],["Mukta Malar",0,[200,300,400,500,600,700,800],0,[],409],["Ultra",1,[400],0,[],410],["Sofia",4,[400],0,[],411],["Alegreya Sans SC",0,[100,300,400,500,700,800,900],1,[],412],["Alice",1,[400],0,[],413],["Anek Bangla",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],414],["Marck Script",4,[400],0,[],415],["Reem Kufi",0,[400,500,600,700],0,[["wght",400,700,400]],416],["Cabin Condensed",0,[400,500,600,700],0,[],417],["Balsamiq Sans",2,[400,700],1,[],418],["Angkor",2,[400],0,[],419],["Secular One",0,[400],0,[],420],["Taviraj",1,[100,200,300,400,500,600,700,800,900],1,[],421],["Gudea",0,[400,700],1,[],422],["Kaisei Decol",1,[400,500,700],0,[],423],["Atkinson Hyperlegible Next",0,[200,300,400,500,600,700,800],1,[["wght",200,800,400]],424],["Funnel Sans",0,[300,400,500,600,700,800],1,[["wght",300,800,400]],425],["Economica",0,[400,700],1,[],426],["Bevan",1,[400],1,[],427],["Belanosima",0,[400,600,700],0,[],428],["Familjen Grotesk",0,[400,500,600,700],1,[["wght",400,700,400]],429],["Julius Sans One",0,[400],0,[],430],["Adamina",1,[400],0,[],431],["Pirata One",2,[400],0,[],432],["Pangolin",4,[400],0,[],433],["Palanquin",0,[100,200,300,400,500,600,700],0,[],434],["IBM Plex Sans JP",0,[100,200,300,400,500,600,700],0,[],435],["M PLUS 2",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],436],["Carter One",2,[400],0,[],437],["Parkinsans",0,[300,400,500,600,700,800],0,[["wght",300,800,400]],438],["Germania One",2,[400],0,[],439],["Wix Madefor Display",0,[400,500,600,700,800],0,[["wght",400,800,400]],440],["Londrina Solid",2,[100,300,400,900],0,[],441],["Cedarville Cursive",4,[400],0,[],442],["Red Hat Mono",3,[300,400,500,600,700],1,[["wght",300,700,400]],443],["Radley",1,[400],1,[],444],["Covered By Your Grace",4,[400],0,[],445],["Pridi",1,[200,300,400,500,600,700],0,[],446],["Grandstander",2,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],447],["Palanquin Dark",0,[400,500,600,700],0,[],448],["Fahkwang",0,[200,300,400,500,600,700],1,[],449],["Hina Mincho",1,[400],0,[],450],["Italiana",0,[400],0,[],451],["Charm",4,[400,700],0,[],452],["Lemonada",2,[300,400,500,600,700],0,[["wght",300,700,400]],453],["Khula",0,[300,400,600,700,800],0,[],454],["Nixie One",2,[400],0,[],455],["Chewy",2,[400],0,[],456],["BenchNine",0,[300,400,700],0,[],457],["Niramit",0,[200,300,400,500,600,700],1,[],458],["Martel Sans",0,[200,300,400,600,700,800,900],0,[],459],["Wix Madefor Text",0,[400,500,600,700,800],1,[["wght",400,800,400]],460],["Boogaloo",2,[400],0,[],461],["Hachi Maru Pop",4,[400],0,[],462],["Tilt Warp",2,[400],0,[["XROT",-45,45,0],["YROT",-45,45,0]],463],["La Belle Aurore",4,[400],0,[],464],["Potta One",2,[400],0,[],465],["Itim",4,[400],0,[],466],["MuseoModerno",2,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],467],["Funnel Display",2,[300,400,500,600,700,800],0,[["wght",300,800,400]],468],["Shrikhand",2,[400],0,[],469],["Leckerli One",4,[400],0,[],470],["Aldrich",0,[400],0,[],471],["Stardos Stencil",2,[400,700],0,[],472],["Aboreto",2,[400],0,[],473],["Sansita",0,[400,700,800,900],1,[],474],["Mate",1,[400],1,[],475],["Tomorrow",0,[100,200,300,400,500,600,700,800,900],1,[],476],["Geo",0,[400],1,[],477],["Special Gothic Expanded One",0,[400],0,[],478],["Kreon",1,[300,400,500,600,700],0,[["wght",300,700,400]],479],["Fustat",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],480],["Baloo Da 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],481],["Rye",2,[400],0,[],482],["Proza Libre",0,[400,500,600,700,800],1,[],483],["Yrsa",1,[300,400,500,600,700],1,[["wght",300,700,400]],484],["Darker Grotesque",0,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],485],["Bowlby One SC",2,[400],0,[],486],["IM Fell English",1,[400],1,[],487],["Sarala",0,[400,700],0,[],488],["Macondo",2,[400],0,[],489],["Ruda",0,[400,500,600,700,800,900],0,[["wght",400,900,400]],490],["Coda",2,[400,800],0,[],491],["UnifrakturMaguntia",2,[400],0,[],492],["Rufina",1,[400,700],0,[],493],["Vina Sans",2,[400],0,[],494],["Akshar",0,[300,400,500,600,700],0,[["wght",300,700,400]],495],["Cabin Sketch",2,[400,700],0,[],496],["Electrolize",0,[400],0,[],497],["Days One",0,[400],0,[],498],["Ovo",1,[400],0,[],499],["Gloock",1,[400],0,[],500],["Just Another Hand",4,[400],0,[],501],["Kiwi Maru",1,[300,400,500],0,[],502],["Oooh Baby",4,[400],0,[],503],["Marcellus SC",1,[400],0,[],504],["Spline Sans",0,[300,400,500,600,700],0,[["wght",300,700,400]],505],["Fragment Mono",3,[400],1,[],506],["Murecho",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],507],["Playpen Sans",4,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],508],["Glegoo",1,[400,700],0,[],509],["Ma Shan Zheng",4,[400],0,[],510],["Anuphan",0,[100,200,300,400,500,600,700],0,[["wght",100,700,400]],511],["Niconne",4,[400],0,[],512],["Yuji Mai",1,[400],0,[],513],["Libre Barcode 128",2,[400],0,[],514],["Barriecito",2,[400],0,[],515],["Fredericka the Great",2,[400],0,[],516],["Basic",0,[400],0,[],517],["Gantari",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],518],["Yatra One",2,[400],0,[],519],["Pontano Sans",0,[300,400,500,600,700],0,[["wght",300,700,400]],520],["Aclonica",0,[400],0,[],521],["Knewave",2,[400],0,[],522],["Big Shoulders",2,[100,200,300,400,500,600,700,800,900],0,[["opsz",10,72,14],["wght",100,900,400]],523],["Krona One",0,[400],0,[],524],["Herr Von Muellerhoff",4,[400],0,[],525],["Charis SIL",1,[400,700],1,[],526],["Castoro",1,[400],1,[],527],["Mali",4,[200,300,400,500,600,700],1,[],528],["Livvic",0,[100,200,300,400,500,600,700,900],1,[],529],["Elsie",2,[400,900],0,[],530],["Overpass Mono",3,[300,400,500,600,700],0,[["wght",300,700,400]],531],["Corben",2,[400,700],0,[],532],["Rozha One",1,[400],0,[],533],["K2D",0,[100,200,300,400,500,600,700,800],1,[],534],["Neucha",4,[400],0,[],535],["Tektur",2,[400,500,600,700,800,900],0,[["wdth",75,100,100],["wght",400,900,400]],536],["Sintony",0,[400,700],0,[],537],["Shadows Into Light Two",4,[400],0,[],538],["Nova Square",2,[400],0,[],539],["Trirong",1,[100,200,300,400,500,600,700,800,900],1,[],540],["Do Hyeon",0,[400],0,[],541],["Pixelify Sans",2,[400,500,600,700],0,[["wght",400,700,400]],542],["Caladea",1,[400,700],1,[],543],["Armata",0,[400],0,[],544],["Podkova",1,[400,500,600,700,800],0,[["wght",400,800,400]],545],["PT Serif Caption",1,[400],1,[],546],["BIZ UDGothic",0,[400,700],0,[],547],["Bona Nova SC",1,[400,700],1,[],548],["Kameron",1,[400,500,600,700],0,[["wght",400,700,400]],549],["Allison",4,[400],0,[],550],["Kosugi",0,[400],0,[],551],["Tiro Bangla",1,[400],1,[],552],["TikTok Sans",0,[300,400,500,600,700,800,900],0,[["opsz",12,36,14],["slnt",-6,0,0],["wdth",75,150,100],["wght",300,900,400]],553],["Grenze Gotisch",2,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],554],["Gowun Batang",1,[400,700],0,[],555],["Inria Serif",1,[300,400,700],1,[],556],["Sofia Sans Semi Condensed",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],557],["Hepta Slab",1,[1,100,200,300,400,500,600,700,800,900],0,[["wght",1,900,400]],558],["Spline Sans Mono",3,[300,400,500,600,700],1,[["wght",300,700,400]],559],["Cantata One",1,[400],0,[],560],["Oranienbaum",1,[400],0,[],561],["Bowlby One",2,[400],0,[],562],["Silkscreen",2,[400,700],0,[],563],["Bentham",1,[400],0,[],564],["Caudex",1,[400,700],1,[],565],["Athiti",0,[200,300,400,500,600,700],0,[],566],["Qwitcher Grypen",4,[400,700],0,[],567],["ZCOOL XiaoWei",0,[400],0,[],568],["Metrophobic",0,[400],0,[],569],["Jersey 25",2,[400],0,[],570],["Judson",1,[400,700],1,[],571],["Marvel",0,[400,700],1,[],572],["Bellefair",1,[400],0,[],573],["Lexend Exa",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],574],["Laila",1,[300,400,500,600,700],0,[],575],["Libre Caslon Display",1,[400],0,[],576],["Petit Formal Script",4,[400],0,[],577],["Cal Sans",0,[400],0,[],578],["Chonburi",2,[400],0,[],579],["Chivo Mono",3,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],580],["Seaweed Script",2,[400],0,[],581],["Pattaya",0,[400],0,[],582],["Enriqueta",1,[400,500,600,700],0,[],583],["Nanum Brush Script",4,[400],0,[],584],["Spinnaker",0,[400],0,[],585],["Candal",0,[400],0,[],586],["Style Script",4,[400],0,[],587],["ADLaM Display",2,[400],0,[],588],["Averia Libre",2,[300,400,700],1,[],589],["Azeret Mono",3,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],590],["Ibarra Real Nova",1,[400,500,600,700],1,[["wght",400,700,400]],591],["Norican",4,[400],0,[],592],["Telex",0,[400],0,[],593],["Glory",0,[100,200,300,400,500,600,700,800],1,[["wght",100,800,400]],594],["Graduate",1,[400],0,[],595],["Nobile",0,[400,500,700],1,[],596],["Antic Didone",1,[400],0,[],597],["Young Serif",1,[400],0,[],598],["Pathway Extreme",0,[100,200,300,400,500,600,700,800,900],1,[["opsz",8,144,12],["wdth",75,100,100],["wght",100,900,400]],599],["Lateef",1,[200,300,400,500,600,700,800],0,[],600],["Wallpoet",2,[400],0,[],601],["Brygada 1918",1,[400,500,600,700],1,[["wght",400,700,400]],602],["Dawning of a New Day",4,[400],0,[],603],["Cormorant Upright",1,[300,400,500,600,700],0,[],604],["Grand Hotel",4,[400],0,[],605],["IBM Plex Sans KR",0,[100,200,300,400,500,600,700],0,[],606],["ZCOOL KuaiLe",0,[400],0,[],607],["Afacad Flux",0,[100,200,300,400,500,600,700,800,900,1000],0,[["slnt",-14,14,0],["wght",100,1000,400]],608],["DotGothic16",0,[400],0,[],609],["Karma",1,[300,400,500,600,700],0,[],610],["Mochiy Pop One",0,[400],0,[],611],["Rakkas",2,[400],0,[],612],["BioRhyme",1,[200,300,400,500,600,700,800],0,[["wdth",100,125,100],["wght",200,800,400]],613],["Marmelad",0,[400],0,[],614],["Gabriela",1,[400],0,[],615],["Cormorant SC",1,[300,400,500,600,700],0,[],616],["Allerta Stencil",0,[400],0,[],617],["Rancho",4,[400],0,[],618],["Yesteryear",4,[400],0,[],619],["Tiro Devanagari Hindi",1,[400],1,[],620],["DynaPuff",2,[400,500,600,700],0,[["wdth",75,100,100],["wght",400,700,400]],621],["Baloo Thambi 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],622],["Alef",0,[400,700],0,[],623],["Share",0,[400,700],1,[],624],["Schoolbell",4,[400],0,[],625],["BIZ UDPMincho",1,[400,700],0,[],626],["IM Fell English SC",1,[400],0,[],627],["Chiron GoRound TC",0,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],628],["Coming Soon",4,[400],0,[],629],["Halant",1,[300,400,500,600,700],0,[],630],["Fjord One",1,[400],0,[],631],["AR One Sans",0,[400,500,600,700],0,[["ARRR",10,60,10],["wght",400,700,400]],632],["Lexend Zetta",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],633],["Encode Sans Expanded",0,[100,200,300,400,500,600,700,800,900],0,[],634],["Sniglet",2,[400,800],0,[],635],["Flow Circular",2,[400],0,[],636],["Annie Use Your Telescope",4,[400],0,[],637],["Klee One",4,[400,600],0,[],638],["Irish Grover",2,[400],0,[],639],["Alegreya SC",1,[400,500,700,800,900],1,[],640],["Libre Barcode 39 Text",2,[400],0,[],641],["Fondamento",4,[400],1,[],642],["Calligraffitti",4,[400],0,[],643],["Arbutus Slab",1,[400],0,[],644],["Rampart One",2,[400],0,[],645],["Allerta",0,[400],0,[],646],["Alatsi",0,[400],0,[],647],["Spectral SC",1,[200,300,400,500,600,700,800],1,[],648],["Goudy Bookletter 1911",1,[400],0,[],649],["Kristi",4,[400],0,[],650],["Beth Ellen",4,[400],0,[],651],["Overlock",2,[400,700,900],1,[],652],["Trocchi",1,[400],0,[],653],["Magra",0,[400,700],0,[],654],["Sigmar One",2,[400],0,[],655],["Koulen",2,[400],0,[],656],["MedievalSharp",2,[400],0,[],657],["RocknRoll One",0,[400],0,[],658],["Arizonia",4,[400],0,[],659],["Zen Antique Soft",1,[400],0,[],660],["Amiko",0,[400,600,700],0,[],661],["Crafty Girls",4,[400],0,[],662],["Rosario",0,[300,400,500,600,700],1,[["wght",300,700,400]],663],["Rochester",4,[400],0,[],664],["Yusei Magic",0,[400],0,[],665],["Anybody",2,[100,200,300,400,500,600,700,800,900],1,[["wdth",50,150,100],["wght",100,900,400]],666],["Monomaniac One",0,[400],0,[],667],["Mouse Memoirs",0,[400],0,[],668],["Ruslan Display",2,[400],0,[],669],["Kaisei Opti",1,[400,500,700],0,[],670],["Faster One",2,[400],0,[],671],["Yuji Syuku",1,[400],0,[],672],["Love Ya Like A Sister",2,[400],0,[],673],["Zalando Sans Expanded",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],674],["Lekton",3,[400,700],1,[],675],["Recursive",0,[300,400,500,600,700,800,900,1000],0,[["CASL",0,1,0],["CRSV",0,1,0.5],["MONO",0,1,0],["slnt",-15,0,0],["wght",300,1000,400]],676],["Average Sans",0,[400],0,[],677],["Libertinus Serif",1,[400,600,700],1,[],678],["Mountains of Christmas",2,[400,700],0,[],679],["Average",1,[400],0,[],680],["Kelly Slab",2,[400],0,[],681],["Markazi Text",1,[400,500,600,700],0,[["wght",400,700,400]],682],["Bubblegum Sans",2,[400],0,[],683],["Waiting for the Sunrise",4,[400],0,[],684],["Cormorant Unicase",1,[300,400,500,600,700],0,[],685],["Shantell Sans",2,[300,400,500,600,700,800],1,[["BNCE",-100,100,0],["INFM",0,100,0],["SPAC",0,100,0],["wght",300,800,400]],686],["Rubik Doodle Shadow",2,[400],0,[],687],["Anek Devanagari",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],688],["Lexend Peta",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],689],["Cairo Play",0,[200,300,400,500,600,700,800,900,1000],0,[["slnt",-11,11,0],["wght",200,1000,400]],690],["Monsieur La Doulaise",4,[400],0,[],691],["Kantumruy Pro",0,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],692],["Inria Sans",0,[300,400,700],1,[],693],["Metamorphous",2,[400],0,[],694],["Meddon",4,[400],0,[],695],["Oxygen Mono",3,[400],0,[],696],["Croissant One",2,[400],0,[],697],["Montagu Slab",1,[100,200,300,400,500,600,700],0,[["opsz",16,144,144],["wght",100,700,400]],698],["Bayon",0,[400],0,[],699],["Nova Mono",3,[400],0,[],700],["Hedvig Letters Serif",1,[400],0,[["opsz",12,24,24]],701],["Over the Rainbow",4,[400],0,[],702],["Tilt Neon",2,[400],0,[["XROT",-45,45,0],["YROT",-45,45,0]],703],["Asul",1,[400,700],0,[],704],["Hahmlet",1,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],705],["Zalando Sans",0,[200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",200,900,400]],706],["Corinthia",4,[400,700],0,[],707],["Quintessential",4,[400],0,[],708],["Sansita Swashed",2,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],709],["Turret Road",2,[200,300,400,500,700,800],0,[],710],["Reddit Sans Condensed",0,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],711],["Zen Dots",2,[400],0,[],712],["Voltaire",0,[400],0,[],713],["Maitree",1,[200,300,400,500,600,700],0,[],714],["Zen Kurenaido",0,[400],0,[],715],["Sometype Mono",3,[400,500,600,700],1,[["wght",400,700,400]],716],["Fanwood Text",1,[400],1,[],717],["Fauna One",1,[400],0,[],718],["Gowun Dodum",0,[400],0,[],719],["Bungee Inline",2,[400],0,[],720],["Abyssinica SIL",1,[400],0,[],721],["Hanuman",1,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],722],["Tenali Ramakrishna",0,[400],0,[],723],["Zen Antique",1,[400],0,[],724],["Bellota Text",2,[300,400,700],1,[],725],["Meow Script",4,[400],0,[],726],["Anton SC",0,[400],0,[],727],["Aref Ruqaa",1,[400,700],0,[],728],["Megrim",2,[400],0,[],729],["Pompiere",2,[400],0,[],730],["Inclusive Sans",0,[300,400,500,600,700],1,[["wght",300,700,400]],731],["Jersey 10",2,[400],0,[],732],["Baloo Bhai 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],733],["Scada",0,[400,700],1,[],734],["Slabo 13px",1,[400],0,[],735],["Birthstone",4,[400],0,[],736],["Hurricane",4,[400],0,[],737],["Sedgwick Ave Display",4,[400],0,[],738],["Scheherazade New",1,[400,500,600,700],0,[],739],["Baloo Tamma 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],740],["Red Rose",2,[300,400,500,600,700],0,[["wght",300,700,400]],741],["Baloo Bhaijaan 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],742],["Farro",0,[300,400,500,700],0,[],743],["Almendra",1,[400,700],1,[],744],["Slackey",2,[400],0,[],745],["Vujahday Script",4,[400],0,[],746],["Copse",1,[400],0,[],747],["Qwigley",4,[400],0,[],748],["Major Mono Display",3,[400],0,[],749],["IBM Plex Sans Hebrew",0,[100,200,300,400,500,600,700],0,[],750],["Imbue",1,[100,200,300,400,500,600,700,800,900],0,[["opsz",10,100,10],["wght",100,900,400]],751],["Poetsen One",2,[400],0,[],752],["Rouge Script",4,[400],0,[],753],["Encode Sans Semi Condensed",0,[100,200,300,400,500,600,700,800,900],0,[],754],["David Libre",1,[400,500,700],0,[],755],["Kodchasan",0,[200,300,400,500,600,700],1,[],756],["Carrois Gothic",0,[400],0,[],757],["Syne Mono",3,[400],0,[],758],["Rubik Dirt",2,[400],0,[],759],["Piazzolla",1,[100,200,300,400,500,600,700,800,900],1,[["opsz",8,30,14],["wght",100,900,400]],760],["Sarina",2,[400],0,[],761],["Rambla",0,[400,700],1,[],762],["Cambay",0,[400,700],1,[],763],["Manjari",0,[100,400,700],0,[],764],["Happy Monkey",2,[400],0,[],765],["Agbalumo",2,[400],0,[],766],["Della Respira",1,[400],0,[],767],["ZCOOL QingKe HuangYou",0,[400],0,[],768],["Aguafina Script",4,[400],0,[],769],["Bungee Spice",2,[400],0,[],770],["Zalando Sans SemiExpanded",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],771],["Mansalva",4,[400],0,[],772],["Poller One",2,[400],0,[],773],["Martian Mono",3,[100,200,300,400,500,600,700,800],0,[["wdth",75,112.5,100],["wght",100,800,400]],774],["Mukta Mahee",0,[200,300,400,500,600,700,800],0,[],775],["Lacquer",2,[400],0,[],776],["Bungee Shade",2,[400],0,[],777],["Jomhuria",2,[400],0,[],778],["Miriam Libre",0,[400,500,600,700],0,[["wght",400,700,400]],779],["Jockey One",0,[400],0,[],780],["McLaren",2,[400],0,[],781],["Coiny",2,[400],0,[],782],["Original Surfer",2,[400],0,[],783],["Fasthand",2,[400],0,[],784],["IM Fell DW Pica",1,[400],1,[],785],["Platypi",1,[300,400,500,600,700,800],1,[["wght",300,800,400]],786],["Allan",2,[400,700],0,[],787],["B612 Mono",3,[400,700],1,[],788],["Vesper Libre",1,[400,500,700,900],0,[],789],["Contrail One",2,[400],0,[],790],["Padauk",0,[400,700],0,[],791],["Cherry Bomb One",2,[400],0,[],792],["Vibur",4,[400],0,[],793],["Akatab",0,[400,500,600,700,800,900],0,[],794],["Modern Antiqua",2,[400],0,[],795],["Asar",1,[400],0,[],796],["Ephesis",4,[400],0,[],797],["Boldonse",2,[400],0,[],798],["Walter Turncoat",4,[400],0,[],799],["Inknut Antiqua",1,[300,400,500,600,700,800,900],0,[],800],["Alike",1,[400],0,[],801],["Amarante",2,[400],0,[],802],["Xanh Mono",3,[400],1,[],803],["Sue Ellen Francisco",4,[400],0,[],804],["Give You Glory",4,[400],0,[],805],["Gotu",0,[400],0,[],806],["KoHo",0,[200,300,400,500,600,700],1,[],807],["Zain",0,[200,300,400,700,800,900],1,[],808],["Numans",0,[400],0,[],809],["Voces",0,[400],0,[],810],["Grape Nuts",4,[400],0,[],811],["Convergence",0,[400],0,[],812],["Kalnia",1,[100,200,300,400,500,600,700],0,[["wdth",100,125,100],["wght",100,700,400]],813],["Battambang",2,[100,300,400,700,900],0,[],814],["Moon Dance",4,[400],0,[],815],["Gaegu",4,[300,400,700],0,[],816],["Teachers",0,[400,500,600,700,800],1,[["wght",400,800,400]],817],["Solway",1,[300,400,500,700,800],0,[],818],["B612",0,[400,700],1,[],819],["Protest Revolution",2,[400],0,[],820],["Montez",4,[400],0,[],821],["Short Stack",4,[400],0,[],822],["Poly",1,[400],1,[],823],["Codystar",2,[300,400],0,[],824],["Bonheur Royale",4,[400],0,[],825],["Coustard",1,[400,900],0,[],826],["Jaldi",0,[400,700],0,[],827],["SUSE",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],828],["Gurajada",0,[400],0,[],829],["Encode Sans Semi Expanded",0,[100,200,300,400,500,600,700,800,900],0,[],830],["Vast Shadow",1,[400],0,[],831],["Square Peg",4,[400],0,[],832],["Euphoria Script",4,[400],0,[],833],["MonteCarlo",4,[400],0,[],834],["Fuzzy Bubbles",4,[400,700],0,[],835],["Modak",2,[400],0,[],836],["Frijole",2,[400],0,[],837],["Arima",2,[100,200,300,400,500,600,700],0,[["wght",100,700,400]],838],["Cutive",1,[400],0,[],839],["Mr De Haviland",4,[400],0,[],840],["Unkempt",2,[400,700],0,[],841],["Capriola",0,[400],0,[],842],["Brawler",1,[400,700],0,[],843],["Kurale",1,[400],0,[],844],["Vampiro One",2,[400],0,[],845],["Fontdiner Swanky",2,[400],0,[],846],["Vollkorn SC",1,[400,600,700,900],0,[],847],["Puritan",0,[400,700],1,[],848],["Metal Mania",2,[400],0,[],849],["Oleo Script Swash Caps",2,[400,700],0,[],850],["Thasadith",0,[400,700],1,[],851],["Quando",1,[400],0,[],852],["Rasa",1,[300,400,500,600,700],1,[["wght",300,700,400]],853],["Inder",0,[400],0,[],854],["Stick No Bills",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],855],["Prosto One",2,[400],0,[],856],["Doppio One",0,[400],0,[],857],["Climate Crisis",2,[400],0,[["YEAR",1979,2050,1979]],858],["Sarpanch",0,[400,500,600,700,800,900],0,[],859],["Expletus Sans",2,[400,500,600,700],1,[["wght",400,700,400]],860],["Rubik Bubbles",2,[400],0,[],861],["Sedgwick Ave",4,[400],0,[],862],["Patrick Hand SC",4,[400],0,[],863],["Averia Sans Libre",2,[300,400,700],1,[],864],["Kadwa",1,[400,700],0,[],865],["Buenard",1,[400,500,600,700],0,[["wght",400,700,400]],866],["League Script",4,[400],0,[],867],["Darumadrop One",2,[400],0,[],868],["Supermercado One",2,[400],0,[],869],["Cherry Cream Soda",2,[400],0,[],870],["Fresca",0,[400],0,[],871],["Road Rage",2,[400],0,[],872],["Finger Paint",2,[400],0,[],873],["Freehand",2,[400],0,[],874],["Sunflower",0,[300,500,700],0,[],875],["Sulphur Point",0,[300,400,700],0,[],876],["Prociono",1,[400],0,[],877],["Ysabeau Office",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],878],["Delius Unicase",4,[400,700],0,[],879],["Tienne",1,[400,700,900],0,[],880],["Bakbak One",2,[400],0,[],881],["Mukta Vaani",0,[200,300,400,500,600,700,800],0,[],882],["Nata Sans",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],883],["Gluten",2,[100,200,300,400,500,600,700,800,900],0,[["slnt",-13,13,0],["wght",100,900,400]],884],["Whisper",4,[400],0,[],885],["Charmonman",4,[400,700],0,[],886],["Bilbo Swash Caps",4,[400],0,[],887],["The Girl Next Door",4,[400],0,[],888],["Goblin One",2,[400],0,[],889],["Cambo",1,[400],0,[],890],["Nosifer",2,[400],0,[],891],["Life Savers",2,[400,700,800],0,[],892],["Oregano",2,[400],1,[],893],["Mohave",0,[300,400,500,600,700],1,[["wght",300,700,400]],894],["Freeman",2,[400],0,[],895],["Balthazar",1,[400],0,[],896],["Kranky",2,[400],0,[],897],["Orelega One",2,[400],0,[],898],["Nokora",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],899],["Meie Script",4,[400],0,[],900],["Atma",2,[300,400,500,600,700],0,[],901],["Artifika",1,[400],0,[],902],["Tiny5",0,[400],0,[],903],["Redressed",4,[400],0,[],904],["Sumana",1,[400,700],0,[],905],["Licorice",4,[400],0,[],906],["Mallanna",0,[400],0,[],907],["Anta",0,[400],0,[],908],["Alike Angular",1,[400],0,[],909],["Bigshot One",2,[400],0,[],910],["Mynerve",4,[400],0,[],911],["Trade Winds",2,[400],0,[],912],["Antic",0,[400],0,[],913],["New Rocker",2,[400],0,[],914],["Wire One",0,[400],0,[],915],["Special Gothic",0,[400,500,600,700],0,[["wdth",75,125,100],["wght",400,700,400]],916],["Shojumaru",2,[400],0,[],917],["Molengo",0,[400],0,[],918],["Bona Nova",1,[400,700],1,[],919],["Song Myung",1,[400],0,[],920],["UnifrakturCook",2,[700],0,[],921],["Anek Malayalam",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],922],["Suranna",1,[400],0,[],923],["Fuggles",4,[400],0,[],924],["Kufam",0,[400,500,600,700,800,900],1,[["wght",400,900,400]],925],["Gasoek One",0,[400],0,[],926],["Odibee Sans",2,[400],0,[],927],["Arya",0,[400,700],0,[],928],["Mako",0,[400],0,[],929],["Carattere",4,[400],0,[],930],["Delicious Handrawn",4,[400],0,[],931],["Sunshiney",4,[400],0,[],932],["Shippori Antique",0,[400],0,[],933],["Bokor",2,[400],0,[],934],["Aladin",2,[400],0,[],935],["Julee",4,[400],0,[],936],["IM Fell Double Pica",1,[400],1,[],937],["Lexend Mega",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],938],["Special Gothic Condensed One",0,[400],0,[],939],["Monofett",3,[400],0,[],940],["Federo",0,[400],0,[],941],["Bagel Fat One",2,[400],0,[],942],["Sansation",0,[300,400,700],1,[],943],["Moul",2,[400],0,[],944],["Wendy One",0,[400],0,[],945],["Edu SA Beginner",4,[400,500,600,700],0,[["wght",400,700,400]],946],["IM Fell French Canon",1,[400],1,[],947],["Genos",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],948],["Protest Strike",2,[400],0,[],949],["Rubik Glitch",2,[400],0,[],950],["Rosarivo",1,[400],1,[],951],["Shanti",0,[400],0,[],952],["Madimi One",0,[400],0,[],953],["Anaheim",0,[400,500,600,700,800],0,[["wght",400,800,400]],954],["Dynalight",2,[400],0,[],955],["Nerko One",4,[400],0,[],956],["Baloo Paaji 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],957],["Alkatra",2,[400,500,600,700],0,[["wght",400,700,400]],958],["Gamja Flower",4,[400],0,[],959],["Cantora One",0,[400],0,[],960],["M PLUS 1 Code",3,[100,200,300,400,500,600,700],0,[["wght",100,700,400]],961],["Borel",4,[400],0,[],962],["Sour Gummy",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",100,125,100],["wght",100,900,400]],963],["Holtwood One SC",1,[400],0,[],964],["Loved by the King",4,[400],0,[],965],["Just Me Again Down Here",4,[400],0,[],966],["Swanky and Moo Moo",4,[400],0,[],967],["Montaga",1,[400],0,[],968],["Port Lligat Sans",0,[400],0,[],969],["BhuTuka Expanded One",1,[400],0,[],970],["Clicker Script",4,[400],0,[],971],["Lemon",2,[400],0,[],972],["Sail",2,[400],0,[],973],["Kablammo",2,[400],0,[["MORF",0,60,0]],974],["Esteban",1,[400],0,[],975],["WindSong",4,[400,500],0,[],976],["Ysabeau SC",0,[1,100,200,300,400,500,600,700,800,900,1000],0,[["wght",1,1000,400]],977],["Galindo",2,[400],0,[],978],["Train One",2,[400],0,[],979],["Libre Barcode 39 Extended Text",2,[400],0,[],980],["Doto",0,[100,200,300,400,500,600,700,800,900],0,[["ROND",0,100,0],["wght",100,900,400]],981],["Baloo Tammudu 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],982],["Uncial Antiqua",2,[400],0,[],983],["Iceberg",2,[400],0,[],984],["Asta Sans",0,[300,400,500,600,700,800],0,[["wght",300,800,400]],985],["Nova Round",2,[400],0,[],986],["Mirza",1,[400,500,600,700],0,[],987],["Protest Riot",2,[400],0,[],988],["Smooch",4,[400],0,[],989],["Nabla",2,[400],0,[["EDPT",0,200,100],["EHLT",0,24,12]],990],["Rubik Spray Paint",2,[400],0,[],991],["Aoboshi One",1,[400],0,[],992],["Baloo Chettan 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],993],["Science Gothic",0,[100,200,300,400,500,600,700,800,900],0,[["CTRS",0,85,0],["slnt",-10,0,0],["wdth",50,200,100],["wght",100,900,400]],994],["Mina",0,[400,700],0,[],995],["Scope One",1,[400],0,[],996],["Maiden Orange",1,[400],0,[],997],["Freckle Face",2,[400],0,[],998],["Birthstone Bounce",4,[400,500],0,[],999],["Alan Sans",0,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],1000],["Kaisei Tokumin",1,[400,500,700,800],0,[],1001],["Mozilla Headline",0,[200,300,400,500,600,700],0,[["wdth",75,125,100],["wght",200,700,400]],1002],["Sancreek",2,[400],0,[],1003],["Gayathri",0,[100,400,700],0,[],1004],["Amethysta",1,[400],0,[],1005],["Mochiy Pop P One",0,[400],0,[],1006],["IBM Plex Sans Thai Looped",0,[100,200,300,400,500,600,700],0,[],1007],["Nova Flat",2,[400],0,[],1008],["Zhi Mang Xing",4,[400],0,[],1009],["Gentium Book Plus",1,[400,700],1,[],1010],["Bellota",2,[300,400,700],1,[],1011],["Spicy Rice",2,[400],0,[],1012],["Reggae One",2,[400],0,[],1013],["Bodoni Moda SC",1,[400,500,600,700,800,900],1,[["opsz",6,96,11],["wght",400,900,400]],1014],["Salsa",2,[400],0,[],1015],["The Nautigal",4,[400,700],0,[],1016],["Viaoda Libre",2,[400],0,[],1017],["Faculty Glyphic",0,[400],0,[],1018],["Henny Penny",2,[400],0,[],1019],["Eagle Lake",4,[400],0,[],1020],["Grenze",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1021],["Crushed",2,[400],0,[],1022],["Ledger",1,[400],0,[],1023],["IM Fell Great Primer",1,[400],1,[],1024],["Gupter",1,[400,500,700],0,[],1025],["Imprima",0,[400],0,[],1026],["Ranchers",2,[400],0,[],1027],["Stalemate",4,[400],0,[],1028],["TASA Orbiter",0,[400,500,600,700,800],0,[["wght",400,800,400]],1029],["Karantina",2,[300,400,700],0,[],1030],["Luxurious Script",4,[400],0,[],1031],["Kdam Thmor Pro",0,[400],0,[],1032],["Asset",2,[400],0,[],1033],["Libre Barcode 128 Text",2,[400],0,[],1034],["Lily Script One",2,[400],0,[],1035],["Manuale",1,[300,400,500,600,700,800],1,[["wght",300,800,400]],1036],["Orienta",0,[400],0,[],1037],["Denk One",0,[400],0,[],1038],["IM Fell DW Pica SC",1,[400],0,[],1039],["Smythe",2,[400],0,[],1040],["Stack Sans Text",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],1041],["Bubbler One",0,[400],0,[],1042],["Reddit Mono",3,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],1043],["Duru Sans",0,[400],0,[],1044],["Baumans",2,[400],0,[],1045],["Waterfall",4,[400],0,[],1046],["Phudu",2,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],1047],["BIZ UDMincho",1,[400,700],0,[],1048],["Anek Tamil",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1049],["Poltawski Nowy",1,[400,500,600,700],1,[["wght",400,700,400]],1050],["Long Cang",4,[400],0,[],1051],["Ribeye",2,[400],0,[],1052],["Imperial Script",4,[400],0,[],1053],["Yomogi",4,[400],0,[],1054],["Comme",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1055],["Tillana",2,[400,500,600,700,800],0,[],1056],["Galada",2,[400],0,[],1057],["Bruno Ace",2,[400],0,[],1058],["Chicle",2,[400],0,[],1059],["Truculenta",0,[100,200,300,400,500,600,700,800,900],0,[["opsz",12,72,14],["wdth",75,125,100],["wght",100,900,400]],1060],["Iceland",2,[400],0,[],1061],["NTR",0,[400],0,[],1062],["Baskervville SC",1,[400,500,600,700],0,[["wght",400,700,400]],1063],["Londrina Outline",2,[400],0,[],1064],["Nova Oval",2,[400],0,[],1065],["Ruthie",4,[400],0,[],1066],["Gugi",2,[400],0,[],1067],["Chau Philomene One",0,[400],1,[],1068],["Hi Melody",4,[400],0,[],1069],["Honk",2,[400],0,[["MORF",0,45,15],["SHLN",0,100,50]],1070],["Varta",0,[300,400,500,600,700],0,[["wght",300,700,400]],1071],["Miltonian",2,[400],0,[],1072],["Kavoon",2,[400],0,[],1073],["Mooli",0,[400],0,[],1074],["Cascadia Code",0,[200,300,400,500,600,700],1,[["wght",200,700,400]],1075],["Homenaje",0,[400],0,[],1076],["Badeen Display",2,[400],0,[],1077],["Medula One",2,[400],0,[],1078],["Baloo Bhaina 2",2,[400,500,600,700,800],0,[["wght",400,800,400]],1079],["Sevillana",2,[400],0,[],1080],["Kenia",2,[400],0,[],1081],["Headland One",1,[400],0,[],1082],["Victor Mono",3,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],1083],["Amiri Quran",1,[400],0,[],1084],["Peralta",1,[400],0,[],1085],["Kotta One",1,[400],0,[],1086],["Edu TAS Beginner",4,[400,500,600,700],0,[["wght",400,700,400]],1087],["Momo Trust Sans",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],1088],["Atomic Age",2,[400],0,[],1089],["Akaya Kanadaka",2,[400],0,[],1090],["Caesar Dressing",2,[400],0,[],1091],["Dokdo",2,[400],0,[],1092],["Macondo Swash Caps",2,[400],0,[],1093],["Pliant",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",100,125,100],["wght",100,900,400]],1094],["Delius Swash Caps",4,[400],0,[],1095],["Lavishly Yours",4,[400],0,[],1096],["Dangrek",2,[400],0,[],1097],["Nova Slim",2,[400],0,[],1098],["Anek Kannada",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1099],["Sekuya",2,[400],0,[],1100],["Mozilla Text",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],1101],["Belgrano",1,[400],0,[],1102],["Jaro",0,[400],0,[["opsz",6,72,14]],1103],["Kode Mono",3,[400,500,600,700],0,[["wght",400,700,400]],1104],["Momo Trust Display",0,[400],0,[],1105],["Stick",0,[400],0,[],1106],["IBM Plex Sans Devanagari",0,[100,200,300,400,500,600,700],0,[],1107],["Ceviche One",2,[400],0,[],1108],["IM Fell Great Primer SC",1,[400],0,[],1109],["Carme",0,[400],0,[],1110],["Overlock SC",2,[400],0,[],1111],["IM Fell Double Pica SC",1,[400],0,[],1112],["Noto Music",0,[400],0,[],1113],["Beau Rivage",4,[400],0,[],1114],["Miniver",2,[400],0,[],1115],["Akronim",2,[400],0,[],1116],["Raleway Dots",2,[400],0,[],1117],["Elms Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1118],["East Sea Dokdo",4,[400],0,[],1119],["Jolly Lodger",2,[400],0,[],1120],["Emilys Candy",2,[400],0,[],1121],["Huninn",0,[400],0,[],1122],["Gentium Plus",1,[400,700],1,[],1123],["Valley Sans",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1124],["Tiro Devanagari Sanskrit",1,[400],1,[],1125],["Trispace",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1126],["LXGW WenKai TC",4,[300,400,700],0,[],1127],["Miltonian Tattoo",2,[400],0,[],1128],["Kulim Park",0,[200,300,400,600,700],1,[],1129],["Mea Culpa",4,[400],0,[],1130],["Fenix",1,[400],0,[],1131],["Nova Cut",2,[400],0,[],1132],["Jacques Francois",1,[400],0,[],1133],["Jomolhari",1,[400],0,[],1134],["IM Fell French Canon SC",1,[400],0,[],1135],["Harmattan",0,[400,500,600,700],0,[],1136],["Agdasima",0,[400,700],0,[],1137],["Stack Sans Headline",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],1138],["Gemunu Libre",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],1139],["Hubot Sans",0,[200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",200,900,400]],1140],["Hedvig Letters Sans",0,[400],0,[],1141],["Redacted",2,[400],0,[],1142],["Bilbo",4,[400],0,[],1143],["Astloch",2,[400,700],0,[],1144],["Rationale",0,[400],0,[],1145],["Cherry Swash",2,[400,700],0,[],1146],["Tauri",0,[400],0,[],1147],["Strait",0,[400],0,[],1148],["Katibeh",2,[400],0,[],1149],["Dorsa",0,[400],0,[],1150],["Gafata",0,[400],0,[],1151],["Chocolate Classical Sans",0,[400],0,[],1152],["Bitcount Single",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1153],["Timmana",0,[400],0,[],1154],["Geom",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1155],["Englebert",0,[400],0,[],1156],["Kapakana",4,[300,400],0,[["wght",300,400,400]],1157],["Kavivanar",4,[400],0,[],1158],["Ballet",4,[400],0,[["opsz",16,72,16]],1159],["Cactus Classical Serif",1,[400],0,[],1160],["Liu Jian Mao Cao",4,[400],0,[],1161],["Moderustic",0,[300,400,500,600,700,800],0,[["wght",300,800,400]],1162],["Barrio",2,[400],0,[],1163],["Comforter",4,[400],0,[],1164],["Margarine",2,[400],0,[],1165],["Solitreo",4,[400],0,[],1166],["Nova Script",2,[400],0,[],1167],["Sigmar",2,[400],0,[],1168],["Liter",0,[400],0,[],1169],["Caacupe One",2,[400],0,[],1170],["Fascinate",2,[400],0,[],1171],["Habibi",1,[400],0,[],1172],["Pavanam",0,[400],0,[],1173],["Alkalami",1,[400],0,[],1174],["Zilla Slab Highlight",1,[400,700],0,[],1175],["Ysabeau",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],1176],["Yeon Sung",2,[400],0,[],1177],["Qahiri",0,[400],0,[],1178],["Story Script",0,[400],0,[],1179],["Sura",1,[400,700],0,[],1180],["Passions Conflict",4,[400],0,[],1181],["Devonshire",4,[400],0,[],1182],["Edu NSW ACT Cursive",4,[400,500,600,700],0,[["wght",400,700,400]],1183],["Marhey",2,[300,400,500,600,700],0,[["wght",300,700,400]],1184],["Port Lligat Slab",1,[400],0,[],1185],["Cagliostro",0,[400],0,[],1186],["Lovers Quarrel",4,[400],0,[],1187],["Scoutie Sans",0,[200,300,400,500,600,700,800],1,[["wght",200,800,400]],1188],["Mate SC",1,[400],0,[],1189],["Stylish",0,[400],0,[],1190],["Kaisei HarunoUmi",1,[400,500,700],0,[],1191],["Joan",1,[400],0,[],1192],["Dekko",4,[400],0,[],1193],["Asap Sharp",0,[100,200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",100,900,400]],1194],["Rubik Scribble",2,[400],0,[],1195],["Gulzar",1,[400],0,[],1196],["Averia Gruesa Libre",2,[400],0,[],1197],["Stint Ultra Condensed",1,[400],0,[],1198],["Engagement",4,[400],0,[],1199],["Erica One",2,[400],0,[],1200],["Tac One",0,[400],0,[],1201],["Metal",2,[400],0,[],1202],["Trykker",1,[400],0,[],1203],["Junge",1,[400],0,[],1204],["Spirax",2,[400],0,[],1205],["Montserrat Underline",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1206],["Girassol",2,[400],0,[],1207],["Anek Gujarati",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1208],["Akaya Telivigala",2,[400],0,[],1209],["Single Day",2,[400],0,[],1210],["Paprika",2,[400],0,[],1211],["Underdog",2,[400],0,[],1212],["Fascinate Inline",2,[400],0,[],1213],["Stint Ultra Expanded",1,[400],0,[],1214],["Sono",0,[200,300,400,500,600,700,800],0,[["MONO",0,1,1],["wght",200,800,400]],1215],["Rum Raisin",0,[400],0,[],1216],["Handjet",2,[100,200,300,400,500,600,700,800,900],0,[["ELGR",1,2,1],["ELSH",0,16,2],["wght",100,900,400]],1217],["Gorditas",2,[400,700],0,[],1218],["Emblema One",2,[400],0,[],1219],["Cute Font",2,[400],0,[],1220],["Shippori Antique B1",0,[400],0,[],1221],["Libertinus Sans",0,[400,700],1,[],1222],["Risque",2,[400],0,[],1223],["Island Moments",4,[400],0,[],1224],["Flamenco",2,[300,400],0,[],1225],["Mystery Quest",2,[400],0,[],1226],["Jacquard 12",2,[400],0,[],1227],["Tourney",2,[100,200,300,400,500,600,700,800,900],1,[["wdth",75,125,100],["wght",100,900,400]],1228],["Chilanka",4,[400],0,[],1229],["Zen Tokyo Zoo",2,[400],0,[],1230],["National Park",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],1231],["Beiruti",0,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],1232],["Braah One",0,[400],0,[],1233],["New Amsterdam",0,[400],0,[],1234],["Yaldevi",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],1235],["Geostar Fill",2,[400],0,[],1236],["Srisakdi",2,[400,700],0,[],1237],["Suwannaphum",1,[100,300,400,700,900],0,[],1238],["Notable",0,[400],0,[],1239],["Caramel",4,[400],0,[],1240],["Griffy",2,[400],0,[],1241],["Romanesco",4,[400],0,[],1242],["Carrois Gothic SC",0,[400],0,[],1243],["Tiro Gurmukhi",1,[400],1,[],1244],["SN Pro",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],1245],["Monomakh",2,[400],0,[],1246],["Vend Sans",0,[300,400,500,600,700],1,[["wght",300,700,400]],1247],["Unlock",2,[400],0,[],1248],["Lugrasimo",4,[400],0,[],1249],["Linden Hill",1,[400],1,[],1250],["Stoke",1,[300,400],0,[],1251],["Gwendolyn",4,[400,700],0,[],1252],["Manufacturing Consent",2,[400],0,[],1253],["Poor Story",2,[400],0,[],1254],["Glass Antiqua",2,[400],0,[],1255],["Text Me One",0,[400],0,[],1256],["Sree Krushnadevaraya",1,[400],0,[],1257],["Piedra",2,[400],0,[],1258],["Sonsie One",2,[400],0,[],1259],["Ysabeau Infant",0,[1,100,200,300,400,500,600,700,800,900,1000],1,[["wght",1,1000,400]],1260],["Seymour One",0,[400],0,[],1261],["Kite One",0,[400],0,[],1262],["Smokum",2,[400],0,[],1263],["Bungee Hairline",2,[400],0,[],1264],["Tulpen One",2,[400],0,[],1265],["Atkinson Hyperlegible Mono",0,[200,300,400,500,600,700,800],1,[["wght",200,800,400]],1266],["Bruno Ace SC",2,[400],0,[],1267],["Festive",4,[400],0,[],1268],["Rubik Moonrocks",2,[400],0,[],1269],["Stack Sans Notch",0,[200,300,400,500,600,700],0,[["wght",200,700,400]],1270],["Arbutus",1,[400],0,[],1271],["Ramaraja",1,[400],0,[],1272],["Yuji Boku",1,[400],0,[],1273],["Benne",1,[400],0,[],1274],["Ancizar Serif",1,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1275],["Inspiration",4,[400],0,[],1276],["Akt",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1277],["Water Brush",4,[400],0,[],1278],["Encode Sans SC",0,[100,200,300,400,500,600,700,800,900],0,[["wdth",75,125,100],["wght",100,900,400]],1279],["Condiment",4,[400],0,[],1280],["Winky Sans",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1281],["Diplomata SC",2,[400],0,[],1282],["Jim Nightshade",4,[400],0,[],1283],["Libre Barcode EAN13 Text",2,[400],0,[],1284],["Simonetta",2,[400,900],1,[],1285],["Autour One",2,[400],0,[],1286],["Bitcount Grid Double",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1287],["Londrina Shadow",2,[400],0,[],1288],["BBH Bartle",0,[400],0,[],1289],["Tiro Devanagari Marathi",1,[400],1,[],1290],["Elsie Swash Caps",2,[400,900],0,[],1291],["Anek Odia",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1292],["Farsan",2,[400],0,[],1293],["Rubik Wet Paint",2,[400],0,[],1294],["Ruluko",0,[400],0,[],1295],["Milonga",2,[400],0,[],1296],["Tilt Prism",2,[400],0,[["XROT",-45,45,0],["YROT",-45,45,0]],1297],["Wittgenstein",1,[400,500,600,700,800,900],1,[["wght",400,900,400]],1298],["Texturina",1,[100,200,300,400,500,600,700,800,900],1,[["opsz",12,72,12],["wght",100,900,400]],1299],["Comforter Brush",4,[400],0,[],1300],["Castoro Titling",2,[400],0,[],1301],["Purple Purse",2,[400],0,[],1302],["Marko One",1,[400],0,[],1303],["My Soul",4,[400],0,[],1304],["New Tegomin",1,[400],0,[],1305],["WDXL Lubrifont JP N",0,[400],0,[],1306],["Shalimar",4,[400],0,[],1307],["Reem Kufi Fun",0,[400,500,600,700],0,[["wght",400,700,400]],1308],["Mogra",2,[400],0,[],1309],["Big Shoulders Stencil",2,[100,200,300,400,500,600,700,800,900],0,[["opsz",10,72,14],["wght",100,900,400]],1310],["Offside",2,[400],0,[],1311],["Praise",4,[400],0,[],1312],["Edu AU VIC WA NT Hand",4,[400,500,600,700],0,[["wght",400,700,400]],1313],["Keania One",2,[400],0,[],1314],["Donegal One",1,[400],0,[],1315],["Iosevka Charon",3,[300,400,500,700],1,[],1316],["Bitcount Prop Single",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1317],["Alumni Sans Pinstripe",0,[400],1,[],1318],["Dai Banna SIL",1,[300,400,500,600,700],1,[],1319],["Orbit",0,[400],0,[],1320],["Inika",1,[400,700],0,[],1321],["Playpen Sans Arabic",4,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],1322],["Chathura",0,[100,300,400,700,800],0,[],1323],["Sofadi One",2,[400],0,[],1324],["Nuosu SIL",0,[400],0,[],1325],["Joti One",2,[400],0,[],1326],["Oi",2,[400],0,[],1327],["Send Flowers",4,[400],0,[],1328],["Jacques Francois Shadow",2,[400],0,[],1329],["Princess Sofia",4,[400],0,[],1330],["Bigelow Rules",2,[400],0,[],1331],["Plaster",2,[400],0,[],1332],["Dr Sugiyama",4,[400],0,[],1333],["Alumni Sans SC",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1334],["Fruktur",2,[400],1,[],1335],["SUSE Mono",0,[100,200,300,400,500,600,700,800],1,[["wght",100,800,400]],1336],["Bungee Outline",2,[400],0,[],1337],["Almendra SC",1,[400],0,[],1338],["Luxurious Roman",2,[400],0,[],1339],["Miss Fajardose",4,[400],0,[],1340],["Ravi Prakash",2,[400],0,[],1341],["Lexend Tera",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1342],["Fleur De Leah",4,[400],0,[],1343],["Koh Santepheap",1,[100,300,400,700,900],0,[],1344],["Sahitya",1,[400,700],0,[],1345],["Momo Signature",0,[400],0,[],1346],["Edu AU VIC WA NT Guides",4,[400,500,600,700],0,[["wght",400,700,400]],1347],["Sixtyfour",3,[400],0,[["BLED",0,100,0],["SCAN",-53,100,0]],1348],["Diplomata",2,[400],0,[],1349],["Arsenal SC",0,[400,700],1,[],1350],["Galdeano",0,[400],0,[],1351],["Odor Mean Chey",1,[400],0,[],1352],["Stalinist One",2,[400],0,[],1353],["Ewert",2,[400],0,[],1354],["Anek Gurmukhi",0,[100,200,300,400,500,600,700,800],0,[["wdth",75,125,100],["wght",100,800,400]],1355],["Libre Barcode 39 Extended",2,[400],0,[],1356],["Meera Inimai",0,[400],0,[],1357],["Babylonica",4,[400],0,[],1358],["Butcherman",2,[400],0,[],1359],["Buda",2,[300],0,[],1360],["Ranga",2,[400,700],0,[],1361],["LXGW WenKai Mono TC",3,[300,400,700],0,[],1362],["Almendra Display",2,[400],0,[],1363],["Dhurjati",0,[400],0,[],1364],["Butterfly Kids",4,[400],0,[],1365],["Londrina Sketch",2,[400],0,[],1366],["Lakki Reddy",4,[400],0,[],1367],["Jersey 20",2,[400],0,[],1368],["Snippet",0,[400],0,[],1369],["Felipa",4,[400],0,[],1370],["Updock",4,[400],0,[],1371],["Gidugu",0,[400],0,[],1372],["Reem Kufi Ink",0,[400],0,[],1373],["Ubuntu Sans Mono",3,[400,500,600,700],1,[["wght",400,700,400]],1374],["Tiro Kannada",1,[400],1,[],1375],["Mr Bedfort",4,[400],0,[],1376],["Taprom",2,[400],0,[],1377],["Neonderthaw",4,[400],0,[],1378],["Betania Patmos",4,[400],0,[],1379],["Bonbon",4,[400],0,[],1380],["Intel One Mono",3,[300,400,500,600,700],1,[["wght",300,700,400]],1381],["Edu VIC WA NT Beginner",4,[400,500,600,700],0,[["wght",400,700,400]],1382],["WDXL Lubrifont SC",0,[400],0,[],1383],["Chiron Hei HK",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],1384],["Federant",2,[400],0,[],1385],["Peddana",1,[400],0,[],1386],["Revalia",2,[400],0,[],1387],["Kirang Haerang",2,[400],0,[],1388],["Chela One",2,[400],0,[],1389],["Wellfleet",1,[400],0,[],1390],["Sirin Stencil",2,[400],0,[],1391],["Bungee Tint",2,[400],0,[],1392],["Aref Ruqaa Ink",1,[400,700],0,[],1393],["Alumni Sans Inline One",2,[400],1,[],1394],["Flavors",2,[400],0,[],1395],["Hubballi",0,[400],0,[],1396],["Vibes",2,[400],0,[],1397],["BBH Hegarty",0,[400],0,[],1398],["Passero One",2,[400],0,[],1399],["Rhodium Libre",1,[400],0,[],1400],["Ribeye Marrow",2,[400],0,[],1401],["Rubik Distressed",2,[400],0,[],1402],["Grey Qo",4,[400],0,[],1403],["Bacasime Antique",1,[400],0,[],1404],["Preahvihear",0,[400],0,[],1405],["Kumar One",2,[400],0,[],1406],["Diphylleia",1,[400],0,[],1407],["Gideon Roman",2,[400],0,[],1408],["Kedebideri",0,[400,500,600,700,800,900],0,[],1409],["TASA Explorer",0,[400,500,600,700,800],0,[["wght",400,800,400]],1410],["Ojuju",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],1411],["GFS Neohellenic",0,[400,700],1,[],1412],["Rubik Iso",2,[400],0,[],1413],["Konkhmer Sleokchher",2,[400],0,[],1414],["Molle",4,[400],1,[],1415],["Foldit",2,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1416],["Uchen",1,[400],0,[],1417],["Jacquarda Bastarda 9",2,[400],0,[],1418],["Grechen Fuemen",4,[400],0,[],1419],["Ancizar Sans",0,[100,200,300,400,500,600,700,800,900,1000],1,[["wght",100,1000,400]],1420],["Alyamama",1,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],1421],["Hanalei Fill",2,[400],0,[],1422],["Noto Serif Dives Akuru",1,[400],0,[],1423],["Micro 5",2,[400],0,[],1424],["Edu NSW ACT Foundation",4,[400,500,600,700],0,[["wght",400,700,400]],1425],["Sedan SC",1,[400],0,[],1426],["Tiro Tamil",1,[400],1,[],1427],["Ponomar",2,[400],0,[],1428],["Epunda Sans",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1429],["Bahiana",2,[400],0,[],1430],["Rubik Pixels",2,[400],0,[],1431],["Jersey 15",2,[400],0,[],1432],["Love Light",4,[400],0,[],1433],["Lunasima",0,[400,700],0,[],1434],["Shizuru",2,[400],0,[],1435],["Tiro Telugu",1,[400],1,[],1436],["BioRhyme Expanded",1,[200,300,400,700,800],0,[],1437],["Gidole",0,[400],0,[],1438],["Bitcount Prop Double Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1439],["Lancelot",2,[400],0,[],1440],["Alumni Sans Collegiate One",0,[400],1,[],1441],["Blaka",2,[400],0,[],1442],["Sixtyfour Convergence",3,[400],0,[["BLED",0,100,0],["SCAN",-53,100,0],["XELA",-100,100,0],["YELA",-100,100,0]],1443],["Oldenburg",2,[400],0,[],1444],["Amarna",0,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],1445],["Gveret Levin",4,[400],0,[],1446],["Kumar One Outline",2,[400],0,[],1447],["Sedan",1,[400],1,[],1448],["Cause",4,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1449],["Rubik Vinyl",2,[400],0,[],1450],["Matemasie",0,[400],0,[],1451],["Flow Rounded",2,[400],0,[],1452],["Are You Serious",4,[400],0,[],1453],["Moulpali",0,[400],0,[],1454],["Langar",2,[400],0,[],1455],["Bitcount Grid Single",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1456],["Kolker Brush",4,[400],0,[],1457],["Tsukimi Rounded",0,[300,400,500,600,700],0,[],1458],["Protest Guerrilla",2,[400],0,[],1459],["Twinkle Star",4,[400],0,[],1460],["Rubik Burned",2,[400],0,[],1461],["Playpen Sans Hebrew",4,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],1462],["Black And White Picture",2,[400],0,[],1463],["Ole",4,[400],0,[],1464],["Aubrey",2,[400],0,[],1465],["Geist Pixel",2,[400],0,[["ELSH",0,100,0]],1466],["Mrs Sheppards",4,[400],0,[],1467],["Cossette Texte",0,[400,700],0,[],1468],["Cascadia Mono",0,[200,300,400,500,600,700],1,[["wght",200,700,400]],1469],["Cherish",4,[400],0,[],1470],["Ruge Boogie",4,[400],0,[],1471],["Jacquard 24",2,[400],0,[],1472],["Splash",4,[400],0,[],1473],["Estonia",4,[400],0,[],1474],["Ruwudu",1,[400,500,600,700],0,[],1475],["Cossette Titre",0,[400,700],0,[],1476],["Iansui",4,[400],0,[],1477],["Trochut",2,[400,700],1,[],1478],["Rubik Puddles",2,[400],0,[],1479],["Flow Block",2,[400],0,[],1480],["Suravaram",1,[400],0,[],1481],["Menbere",0,[100,200,300,400,500,600,700],0,[["wght",100,700,400]],1482],["Explora",4,[400],0,[],1483],["Estedad",0,[100,200,300,400,500,600,700,800,900],0,[["wght",100,900,400]],1484],["Kings",4,[400],0,[],1485],["Triodion",2,[400],0,[],1486],["Rubik Gemstones",2,[400],0,[],1487],["Danfo",1,[400],0,[["ELSH",0,100,0]],1488],["Zen Loop",2,[400],1,[],1489],["UoqMunThenKhung",1,[400],0,[],1490],["Rubik Glitch Pop",2,[400],0,[],1491],["WDXL Lubrifont TC",0,[400],0,[],1492],["Labrada",1,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1493],["Noto Sans Cypro Minoan",0,[400],0,[],1494],["Rubik Beastly",2,[400],0,[],1495],["Rubik 80s Fade",2,[400],0,[],1496],["Ga Maamli",2,[400],0,[],1497],["Workbench",3,[400],0,[["BLED",0,100,0],["SCAN",-53,100,0]],1498],["Snowburst One",2,[400],0,[],1499],["Rubik Microbe",2,[400],0,[],1500],["Chiron Sung HK",1,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],1501],["Edu AU VIC WA NT Dots",4,[400,500,600,700],0,[["wght",400,700,400]],1502],["Redacted Script",2,[300,400,700],0,[],1503],["Sassy Frass",4,[400],0,[],1504],["Narnoor",0,[400,500,600,700,800],0,[],1505],["Palette Mosaic",2,[400],0,[],1506],["Kalnia Glaze",2,[100,200,300,400,500,600,700],0,[["wdth",100,125,100],["wght",100,700,400]],1507],["Petemoss",4,[400],0,[],1508],["Tai Heritage Pro",1,[400,700],0,[],1509],["Lumanosimo",4,[400],0,[],1510],["Alien Block",2,[400],0,[],1511],["Slackside One",4,[400],0,[],1512],["BBH Bogle",0,[400],0,[],1513],["Big Shoulders Inline",2,[100,200,300,400,500,600,700,800,900],0,[["opsz",10,72,14],["wght",100,900,400]],1514],["Libertinus Mono",3,[400],0,[],1515],["LXGW Marker Gothic",0,[400],0,[],1516],["Finlandica Text",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1517],["Iosevka Charon Mono",3,[300,400,500,700],1,[],1518],["Syne Tactile",2,[400],0,[],1519],["Agu Display",2,[400],0,[["MORF",0,60,0]],1520],["Combo",2,[400],0,[],1521],["Noto Sans Pau Cin Hau",0,[400],0,[],1522],["Asimovian",0,[400],0,[],1523],["Tirra",0,[400,500,600,700,800,900],0,[],1524],["Bahianita",2,[400],0,[],1525],["Tagesschrift",2,[400],0,[],1526],["Rubik Doodle Triangles",2,[400],0,[],1527],["Parastoo",1,[400,500,600,700],0,[["wght",400,700,400]],1528],["Hanalei",2,[400],0,[],1529],["Bpmf Huninn",0,[400],0,[],1530],["Gajraj One",2,[400],0,[],1531],["Lilex",3,[100,200,300,400,500,600,700],1,[["wght",100,700,400]],1532],["Annapurna SIL",1,[400,700],0,[],1533],["M PLUS Code Latin",0,[100,200,300,400,500,600,700],0,[["wdth",100,125,100],["wght",100,700,400]],1534],["Rock 3D",2,[400],0,[],1535],["Rubik Marker Hatch",2,[400],0,[],1536],["Geostar",2,[400],0,[],1537],["Tapestry",4,[400],0,[],1538],["Moo Lah Lah",2,[400],0,[],1539],["Coral Pixels",2,[400],0,[],1540],["Ingrid Darling",4,[400],0,[],1541],["Hind Mysuru",0,[300,400,500,600,700],0,[],1542],["Blaka Hollow",2,[400],0,[],1543],["Geomini",0,[200,300,400,500,600,700,800],0,[["wght",200,800,400]],1544],["Savate",0,[200,300,400,500,600,700,800,900],1,[["wght",200,900,400]],1545],["Libertinus Serif Display",2,[400],0,[],1546],["Rubik Broken Fax",2,[400],0,[],1547],["Bitcount",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1548],["Playpen Sans Deva",4,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],1549],["Grandiflora One",1,[400],0,[],1550],["Moirai One",2,[400],0,[],1551],["Miranda Sans",0,[400,500,600,700],1,[["wght",400,700,400]],1552],["Edu SA Hand",4,[400,500,600,700],0,[["wght",400,700,400]],1553],["Rubik Storm",2,[400],0,[],1554],["Hibur Mono",3,[400],0,[],1555],["Edu QLD Beginner",4,[400,500,600,700],0,[["wght",400,700,400]],1556],["Epunda Slab",1,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1557],["Lisu Bosa",1,[200,300,400,500,600,700,800,900],1,[],1558],["Noto Sans Indic Siyaq Numbers",0,[400],0,[],1559],["Winky Rough",0,[300,400,500,600,700,800,900],1,[["wght",300,900,400]],1560],["Rubik Maps",2,[400],0,[],1561],["Bytesized",0,[400],0,[],1562],["Puppies Play",4,[400],0,[],1563],["Yuyu",4,[400],0,[],1564],["Exile",2,[400],0,[],1565],["Jaini",2,[400],0,[],1566],["Chokokutai",2,[400],0,[],1567],["Playpen Sans Thai",4,[100,200,300,400,500,600,700,800],0,[["wght",100,800,400]],1568],["Jaini Purva",2,[400],0,[],1569],["Sirivennela",0,[400],0,[],1570],["Noto Sans Old Hungarian",0,[400],0,[],1571],["Sankofa Display",0,[400],0,[],1572],["Namdhinggo",1,[400,500,600,700,800],0,[],1573],["Edu AU VIC WA NT Pre",4,[400,500,600,700],0,[["wght",400,700,400]],1574],["Rubik Maze",2,[400],0,[],1575],["Noto Serif Khitan Small Script",1,[400],0,[],1576],["Warnes",2,[400],0,[],1577],["Yuyu Short",4,[400],0,[],1578],["BJCree",1,[400,500,600,700],0,[],1579],["Montenegrin Gothic One",1,[400],0,[],1580],["Datatype",3,[100,200,300,400,500,600,700,800,900],0,[["wdth",50,150,100],["wght",100,900,400]],1581],["Ponnala",2,[400],0,[],1582],["Shafarik",2,[400],0,[],1583],["Maname",1,[400],0,[],1584],["Edu VIC WA NT Hand",4,[400,500,600,700],0,[["wght",400,700,400]],1585],["Rubik Lines",2,[400],0,[],1586],["Mingzat",0,[400],0,[],1587],["Finlandica Headline",0,[100,200,300,400,500,600,700,800,900],1,[["wght",100,900,400]],1588],["Jacquard 12 Charted",2,[400],0,[],1589],["Saira Stencil",2,[100,200,300,400,500,600,700,800,900],1,[["wdth",50,125,100],["wght",100,900,400]],1590],["Bpmf Zihi Kai Std",0,[400],0,[],1591],["Tuffy",0,[400,700],1,[],1592],["Bitcount Grid Double Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1593],["Noto Sans Elymaic",0,[400],0,[],1594],["Pochaevsk",2,[400],0,[],1595],["Blaka Ink",2,[400],0,[],1596],["Noto Serif Ottoman Siyaq",1,[400],0,[],1597],["Yuji Hentaigana Akari",4,[400],0,[],1598],["Bitcount Single Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1599],["Noto Znamenny Musical Notation",0,[400],0,[],1600],["Bitcount Grid Single Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1601],["Matangi",0,[300,400,500,600,700,800,900],0,[["wght",300,900,400]],1602],["Edu NSW ACT Hand Pre",4,[400,500,600,700],0,[["wght",400,700,400]],1603],["Edu AU VIC WA NT Arrows",4,[400,500,600,700],0,[["wght",400,700,400]],1604],["Noto Sans SignWriting",0,[400],0,[],1605],["Libertinus Keyboard",2,[400],0,[],1606],["Padyakke Expanded One",1,[400],0,[],1607],["Bitcount Prop Double",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["slnt",-8,0,0],["wght",100,900,400]],1608],["Bpmf Iansui",4,[400],0,[],1609],["Strichpunkt Sans",0,[400,500,600,700,800,900],0,[["wdth",100,200,100],["wght",400,900,400]],1610],["Kay Pho Du",1,[400,500,600,700],0,[],1611],["Bitcount Prop Single Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1612],["Noto Serif Hentaigana",1,[200,300,400,500,600,700,800,900],0,[["wght",200,900,400]],1613],["Jacquard 24 Charted",2,[400],0,[],1614],["Edu QLD Hand",4,[400,500,600,700],0,[["wght",400,700,400]],1615],["Noto Sans Mayan Numerals",0,[400],0,[],1616],["Bitcount Ink",2,[100,200,300,400,500,600,700,800,900],0,[["CRSV",0,1,0.5],["ELSH",0,100,0],["ELXP",0,100,0],["SZP1",0,100,0],["SZP2",0,100,0],["XPN1",-100,100,0],["XPN2",-100,100,0],["YPN1",-100,100,0],["YPN2",-100,100,0],["slnt",-8,0,0],["wght",100,900,400]],1617],["Noto Sans Caucasian Albanian",0,[400],0,[],1618],["Jersey 10 Charted",2,[400],0,[],1619],["Jersey 15 Charted",2,[400],0,[],1620],["Betania Patmos In",4,[400],0,[],1621],["Idiqlat",1,[200,300,400],0,[],1622],["Betania Patmos GDL",4,[400],0,[],1623],["Betania Patmos In GDL",4,[400],0,[],1624],["Edu VIC WA NT Hand Pre",4,[400,500,600,700],0,[["wght",400,700,400]],1625],["Jersey 25 Charted",2,[400],0,[],1626],["Micro 5 Charted",2,[400],0,[],1627],["Kanchenjunga",0,[400,500,600,700],0,[],1628],["Yuji Hentaigana Akebono",4,[400],0,[],1629],["Yarndings 20 Charted",2,[400],0,[],1630],["Jersey 20 Charted",2,[400],0,[],1631],["Jacquarda Bastarda 9 Charted",2,[400],0,[],1632],["Noto Sans Nushu",0,[400],0,[],1633],["Ramsina",1,[400],0,[],1634],["Yarndings 12",2,[400],0,[],1635],["Yarndings 12 Charted",2,[400],0,[],1636],["Yarndings 20",2,[400],0,[],1637]]};
+</script>
+
+<script>
+/* ── analytics ────────────────────────────────────────────────
+   Microsoft Clarity, cookieless: consent is never granted, so Clarity sets no
+   cookies and every page view gets its own id. Only runs on the published site. */
+const CLARITY_ID = "ysh2xjisxj";
+function track(ev){ try { if (window.clarity) window.clarity("event", ev); } catch(e){} }
+/* local and file:// runs stay out of the data */
+if (CLARITY_ID && /\.github\.io$/.test(location.hostname)){
+  (function(c,l,a,r,i,t,y){
+    c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+    t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+    y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+  })(window, document, "clarity", "script", CLARITY_ID);
+  window.clarity("consentv2", { ad_Storage:"denied", analytics_Storage:"denied" });
+}
+</script>
+
+<style>.hide-sm{}@media (max-width:820px){.hide-sm{display:none !important}}</style>
+<script>
+"use strict";
+
+/* ── curated starting pairs ───────────────────────────────────
+   Each is a real, defensible match; the note says why it works. */
+const PRESETS = [
+  {n:"Editorial classic", d:"Playfair Display", b:"Source Sans 3", why:"High-contrast didone against a neutral humanist", dw:700, bw:400, ratio:1.25, dls:-0.02, dlh:1.06},
+  {n:"Warm bookish",      d:"Fraunces",         b:"Public Sans",   why:"Soft old-style quirk, cooled by a plain grotesque", dw:600, bw:400, ratio:1.25, dls:-0.015,dlh:1.08},
+  {n:"Newspaper",         d:"Newsreader",       b:"Archivo",       why:"Screen-first text serif over a condensed workhorse", dw:600, bw:400, ratio:1.2,  dls:-0.01, dlh:1.12},
+  {n:"Superfamily",       d:"DM Serif Display", b:"DM Sans",       why:"Same designer, shared skeleton — safe by construction", dw:400, bw:400, ratio:1.333,dls:-0.02, dlh:1.05},
+  {n:"Contemporary",      d:"Instrument Serif", b:"Instrument Sans",why:"Tight display serif with its own matched sans", dw:400, bw:400, ratio:1.333,dls:-0.015,dlh:1.0},
+  {n:"Humanist",          d:"Lora",             b:"Nunito Sans",   why:"Calligraphic serif softened by a rounded sans", dw:600, bw:400, ratio:1.2,  dls:-0.005,dlh:1.15},
+  {n:"Technical",         d:"Spectral",         b:"IBM Plex Sans", why:"Both drawn for screens; matching x-heights", dw:600, bw:400, ratio:1.2,  dls:-0.01, dlh:1.14},
+  {n:"Loud sans",         d:"Archivo Black",    b:"Archivo",       why:"One family, extreme weight jump does the work", dw:400, bw:400, ratio:1.25, dls:-0.025,dlh:1.0},
+  {n:"Elegant",           d:"Cormorant Garamond",b:"Jost",         why:"Delicate garalde grounded by a geometric sans", dw:600, bw:400, ratio:1.414,dls:0,     dlh:1.04},
+  {n:"Inverted",          d:"Sora",             b:"Newsreader",    why:"Sans headline over a serif read — flips the default", dw:600, bw:400, ratio:1.25, dls:-0.03, dlh:1.08},
+  {n:"Geometric",         d:"Poppins",          b:"Lora",          why:"Circular caps balanced by a warm text serif", dw:600, bw:400, ratio:1.25, dls:-0.02, dlh:1.1},
+  {n:"Brutal",            d:"Bricolage Grotesque",b:"Inter Tight", why:"Wonky display grotesque, neutral text grotesque", dw:700, bw:400, ratio:1.333,dls:-0.03, dlh:0.98}
+];
+
+/* ── specimen copy ────────────────────────────────────────────
+   Written to exercise numerals, accents, ligatures and italics. */
+const COPY = {
+  en:{
+    lang:"en",
+    kicker:"Field notes",
+    h1:"The savanna that ships the world its roses",
+    deck:"Two hours north of Bogotá, at 2,600 metres above the sea, a cold-climate flower economy runs on equatorial light, refrigerated air, and the stubborn habit of reaching Miami before the petals open.",
+    author:"Sebastián Muñoz",
+    place:"Sabana de Bogotá",
+    date:"14 February 2026",
+    read:"12 min read",
+    lede:"The greenhouse doors open at 4:40 a.m., and the cold comes out first — a thin, mineral chill that has been sitting on the plateau all night. Inside, under twelve hectares of polyethylene, the roses do not know it is February. They know only that the light arrived at the hour it always arrives, and that it will leave at the hour it always leaves.",
+    p2:"That constancy is the entire business. The plateau sits within a degree of the equator, which hands the crop roughly twelve hours of daylight on every day of the year — no summer to rush a stem, no winter to stall one. Growers further from the line spend fortunes correcting for a sun that wanders. Here the sun is a fixed cost, and the variable that matters is temperature.",
+    h2a:"A crop measured in hours",
+    p3:"From the moment a stem is cut, the clock is the only serious competitor. A rose loses commercial life at something close to a day for every hour it spends warm, so the corridor from the growing beds to the cargo terminal is built as one unbroken cold chain: 2 °C in the grading hall, 2 °C in the truck, 2 °C in the belly of the freighter. Break it once and the flower still looks perfect on arrival. It simply dies four days early, in someone else's kitchen.",
+    quote:"Nobody here sells flowers. What we sell is the ninety-six hours between the cut and the vase.",
+    cite:"Post-harvest lead, Tocancipá",
+    p4:"You can read that discipline in the buildings. The grading halls are long, low and windowless, lit at an intensity chosen for colour matching rather than comfort, and staffed by people who can identify a variety — Freedom, Explorer, Mondial — at three metres, in motion. A bunch is assembled, sleeved, banded and boxed in under ninety seconds. The box is stamped, scanned and gone.",
+    figcap:"<b>Grading hall, 05:12.</b> Stems are sorted by length in 10 cm increments; anything under 40 cm goes to the domestic market or the compost lane.",
+    h2b:"What the chain costs",
+    stats:[["Elevation","2,600 m"],["Daylight, year-round","≈ 12 h"],["Cold-chain target","2 °C"],["Cut to vase","96 h"]],
+    list:[
+      "Refrigeration is the single largest line item after labour, and it never switches off — not at night, not on a holiday, not during a strike.",
+      "Air freight is priced by volume as much as by weight, which is why box geometry gets more design attention than packaging usually deserves.",
+      "Varietal royalties are paid per stem, to breeders who may never see the farm.",
+      "A missed flight in the second week of February is not a delay. It is a total loss."
+    ],
+    p5:"None of this is visible at the other end. The flower arrives in a supermarket bucket at £4.50 or $6.99, wrapped in cellophane, with a label naming a country and nothing else. It is one of the few things you can buy that is genuinely fresher for having travelled five thousand kilometres in a hurry — and the only reason it works is that, for four days, nobody let it get warm.",
+    foot:"Specimen copy. Written to exercise numerals, accented characters, ligatures (office, flight, fifty), italics and long words — <em>not</em> reporting. Swap it for your own text when a real headline needs testing.",
+    mkicker:"Field notes",
+    mh1:"The savanna that ships the world its roses",
+    mdeck:"Equatorial light, refrigerated air, and ninety-six hours to get there.",
+    mp:["The greenhouse doors open at 4:40 a.m., and the cold comes out first — a thin, mineral chill that has been sitting on the plateau all night.","Inside, under twelve hectares of polyethylene, the roses do not know it is February. They know only that the light arrived at the hour it always arrives.","That constancy is the entire business. No summer to rush a stem, no winter to stall one."],
+    mh2:"A crop measured in hours",
+    idxTitle:"This week",
+    idxSub:"Six pieces on the economics of things that spoil.",
+    idx:[
+      ["The savanna that ships the world its roses","Bogotá","12 min"],
+      ["Why saffron is still picked by hand","Khorasán","8 min"],
+      ["The ice trade that built Boston","Archive","15 min"],
+      ["Everything a fish market knows by 6 a.m.","Tsukiji","9 min"],
+      ["Milk, measured in kilometres","Normandie","11 min"],
+      ["The 48-hour life of a printed newspaper","Medellín","7 min"]
+    ],
+    cardQ:"What we sell is the ninety-six hours between the cut and the vase.",
+    cardWho:"Marcela Ospina",
+    cardRole:"Post-harvest lead, Tocancipá",
+    cardBtns:["Save","Share"],
+    navTtl:"Field notes",
+    glyphs:"ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789 áéíóúñüÁÉÑ &@#$€£¥ ()[]{} “”‘’ ,.;:!?¿¡ —–- */ office flight fifty",
+    big:"Handgloves"
+  },
+  es:{
+    lang:"es",
+    kicker:"Cuaderno de campo",
+    h1:"La sabana que le envía rosas al mundo entero",
+    deck:"A dos horas al norte de Bogotá, a 2.600 metros sobre el nivel del mar, una economía de flores de clima frío funciona con luz ecuatorial, aire refrigerado y la costumbre terca de llegar a Miami antes de que los pétalos se abran.",
+    author:"Sebastián Muñoz",
+    place:"Sabana de Bogotá",
+    date:"14 de febrero de 2026",
+    read:"12 min de lectura",
+    lede:"Las puertas del invernadero se abren a las 4:40 de la mañana, y lo primero que sale es el frío — un frío delgado y mineral que llevaba toda la noche posado sobre el altiplano. Adentro, bajo doce hectáreas de polietileno, las rosas no saben que es febrero. Solo saben que la luz llegó a la hora en que siempre llega, y que se irá a la hora en que siempre se va.",
+    p2:"Esa constancia es todo el negocio. El altiplano está a menos de un grado del ecuador, lo que le entrega al cultivo unas doce horas de luz todos los días del año: no hay verano que apure un tallo ni invierno que lo detenga. Los productores más lejanos de la línea gastan fortunas corrigiendo un sol que se mueve. Aquí el sol es un costo fijo, y la variable que importa es la temperatura.",
+    h2a:"Un cultivo medido en horas",
+    p3:"Desde que se corta un tallo, el reloj es el único competidor serio. Una rosa pierde cerca de un día de vida comercial por cada hora que pasa tibia, así que el corredor entre las camas de cultivo y la terminal de carga se construye como una sola cadena de frío sin interrupciones: 2 °C en la sala de clasificación, 2 °C en el camión, 2 °C en la panza del avión. Basta romperla una vez y la flor sigue llegando perfecta. Simplemente se muere cuatro días antes, en la cocina de otra persona.",
+    quote:"Aquí nadie vende flores. Lo que vendemos son las noventa y seis horas entre el corte y el florero.",
+    cite:"Jefa de poscosecha, Tocancipá",
+    p4:"Esa disciplina se lee en los edificios. Las salas de clasificación son largas, bajas y sin ventanas, iluminadas a una intensidad elegida para igualar color y no para dar confort, y atendidas por gente capaz de reconocer una variedad — Freedom, Explorer, Mondial — a tres metros y en movimiento. Un ramo se arma, se enfunda, se amarra y se encaja en menos de noventa segundos. La caja se sella, se escanea y desaparece.",
+    figcap:"<b>Sala de clasificación, 05:12.</b> Los tallos se ordenan por longitud en tramos de 10 cm; lo que baje de 40 cm va al mercado interno o al carril de compostaje.",
+    h2b:"Lo que cuesta la cadena",
+    stats:[["Altitud","2.600 m"],["Luz, todo el año","≈ 12 h"],["Meta de frío","2 °C"],["Corte a florero","96 h"]],
+    list:[
+      "La refrigeración es el rubro más grande después de la nómina, y no se apaga nunca: ni de noche, ni en festivo, ni durante un paro.",
+      "El flete aéreo se cobra tanto por volumen como por peso, y por eso la geometría de la caja recibe más atención de diseño de la que suele recibir un empaque.",
+      "Las regalías por variedad se pagan por tallo, a obtentores que quizá nunca vean la finca.",
+      "Un vuelo perdido en la segunda semana de febrero no es un retraso. Es una pérdida total."
+    ],
+    p5:"Nada de esto se ve del otro lado. La flor llega a un balde de supermercado a $6,99 o £4,50, envuelta en celofán, con una etiqueta que nombra un país y nada más. Es una de las pocas cosas que uno puede comprar que está genuinamente más fresca por haber viajado cinco mil kilómetros con afán — y lo único que lo hace posible es que, durante cuatro días, nadie dejó que se calentara.",
+    foot:"Texto de muestra. Escrito para poner a prueba números, tildes, eñes, ligaduras (oficina, fila, cincuenta), cursivas y palabras largas — <em>no</em> es un reportaje. Reemplázalo por tu propio texto cuando necesites probar un titular real.",
+    mkicker:"Cuaderno de campo",
+    mh1:"La sabana que le envía rosas al mundo",
+    mdeck:"Luz ecuatorial, aire refrigerado y noventa y seis horas para llegar.",
+    mp:["Las puertas del invernadero se abren a las 4:40 de la mañana, y lo primero que sale es el frío, un frío delgado que llevaba toda la noche sobre el altiplano.","Adentro, bajo doce hectáreas de polietileno, las rosas no saben que es febrero. Solo saben que la luz llegó a la hora en que siempre llega.","Esa constancia es todo el negocio. No hay verano que apure un tallo ni invierno que lo detenga."],
+    mh2:"Un cultivo medido en horas",
+    idxTitle:"Esta semana",
+    idxSub:"Seis piezas sobre la economía de las cosas que se dañan.",
+    idx:[
+      ["La sabana que le envía rosas al mundo","Bogotá","12 min"],
+      ["Por qué el azafrán se sigue cosechando a mano","Jorasán","8 min"],
+      ["El comercio de hielo que construyó Boston","Archivo","15 min"],
+      ["Todo lo que una plaza de mercado sabe a las 6 a.m.","Tsukiji","9 min"],
+      ["Leche, medida en kilómetros","Normandía","11 min"],
+      ["Las 48 horas de vida de un periódico impreso","Medellín","7 min"]
+    ],
+    cardQ:"Lo que vendemos son las noventa y seis horas entre el corte y el florero.",
+    cardWho:"Marcela Ospina",
+    cardRole:"Jefa de poscosecha, Tocancipá",
+    cardBtns:["Guardar","Compartir"],
+    navTtl:"Cuaderno de campo",
+    glyphs:"ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789 áéíóúñüÁÉÍÓÚÑÜ &@#$€£ ()[]{} «»“”‘’ ,.;:!?¿¡ —–- oficina fila cincuenta",
+    big:"Manoplas"
+  }
+};
+
+const RATIOS = [
+  [1.125,"Major second"],[1.2,"Minor third"],[1.25,"Major third"],
+  [1.333,"Perfect fourth"],[1.414,"Augmented fourth"],[1.5,"Perfect fifth"],[1.618,"Golden ratio"]
+];
+</script>
+
+<script>
+"use strict";
+const CAT_SHORT = {"Sans Serif":"Sans","Serif":"Serif","Display":"Display","Monospace":"Mono","Handwriting":"Script"};
+const FALLBACK = {
+  "Serif":'Georgia,"Times New Roman",serif',
+  "Sans Serif":'"Helvetica Neue",Arial,sans-serif',
+  "Monospace":'ui-monospace,Menlo,monospace',
+  "Display":'Georgia,serif',
+  "Handwriting":'cursive'
+};
+const CUSTOM_CAT = "Sans Serif";
+
+const CATALOG = new Map();
+GF.fonts.forEach(r => CATALOG.set(r[0], {
+  name:r[0], cat:GF.cats[r[1]], w:r[2], ital:!!r[3], axes:r[4], pop:r[5], custom:false
+}));
+function fdata(n){ return CATALOG.get(n) || {name:n, cat:CUSTOM_CAT, w:[400], ital:false, axes:[], pop:1e6, custom:true}; }
+function axisOf(f,t){ return f.axes.find(a => a[0] === t) || null; }
+function axisLabel(t){ return GF.axisNames[t] || t; }
+
+/* ── Google Fonts css2 URL ─────────────────────────────────── */
+function gfUrl(f){
+  const fam = f.name.replace(/ /g, "+");
+  const cont = f.axes.filter(a => a[0] !== "ital");
+  const disc = [];
+  if (f.ital) disc.push(["ital", [0, 1]]);
+  if (!axisOf(f, "wght") && f.w.length > 1) disc.push(["wght", f.w]);
+  const tags = [...cont.map(a => a[0]), ...disc.map(d => d[0])].sort();
+  if (!tags.length) return `https://fonts.googleapis.com/css2?family=${fam}&display=swap`;
+  let tuples = [[]];
+  tags.forEach(t => {
+    const d = disc.find(x => x[0] === t);
+    if (d){
+      const next = [];
+      tuples.forEach(row => d[1].forEach(v => next.push([...row, String(v)])));
+      tuples = next;
+    } else {
+      const a = cont.find(x => x[0] === t);
+      const v = a[1] === a[2] ? String(a[1]) : `${a[1]}..${a[2]}`;
+      tuples = tuples.map(row => [...row, v]);
+    }
+  });
+  const spec = tuples.map(r => r.join(",")).join(";");
+  return `https://fonts.googleapis.com/css2?family=${fam}:${tags.join(",")}@${spec}&display=swap`;
+}
+const linked = new Set();
+function ensureFont(name){
+  if (linked.has(name)) return;
+  linked.add(name);
+  const f = CATALOG.get(name);
+  if (!f) return;                      // custom fonts are already registered
+  const l = document.createElement("link");
+  l.rel = "stylesheet"; l.href = gfUrl(f);
+  document.head.appendChild(l);
+}
+
+/* ── state ─────────────────────────────────────────────────── */
+function makePair(preset){
+  return {
+    dsp:{fam:preset.d, w:preset.dw, ital:false, ls:preset.dls, lh:preset.dlh, ax:{}},
+    bod:{fam:preset.b, w:preset.bw, ital:false, ls:0,          lh:1.62,      ax:{}},
+    base:19, ratio:preset.ratio, step:4, measure:66, preset:preset.n
+  };
+}
+const S = {
+  view:"editorial", compare:false, active:"a", ground:"light",
+  lang:"en", big:null, customs:[], sec:"dsp",
+  pairs:{ a:makePair(PRESETS[0]), b:makePair(PRESETS[6]) }
+};
+
+/* ── type scale ────────────────────────────────────────────── */
+function scale(base, ratio, step){
+  const s = x => Math.round(base * Math.pow(ratio, x) * 10) / 10;
+  return {
+    h1:s(step),
+    h2:s(Math.max(1, step - 2)),
+    h3:s(Math.max(1, step - 3)),
+    deck:s(1),
+    body:base,
+    sm:Math.max(12, s(-1)),
+    xs:Math.max(10, s(-2))
+  };
+}
+function sizes(p){ return scale(p.base, p.ratio, p.step); }
+function msizes(p){
+  const b = Math.round(Math.min(19, Math.max(15, p.base * 0.9)) * 10) / 10;
+  const st = Math.max(2, p.step - 1);
+  const s = scale(b, p.ratio, st);
+  return { h1:s.h1, h2:s.h2, h3:s.h3, deck:s.deck, body:b,
+           sm:Math.max(12, s.sm), xs:Math.max(10, s.xs), quote:scale(b, p.ratio, Math.max(2, st - 1)).h1 };
+}
+
+/* ── slot → css ────────────────────────────────────────────── */
+function stack(name){
+  const f = fdata(name);
+  return `"${name.replace(/"/g,"")}",${FALLBACK[f.cat] || FALLBACK["Sans Serif"]}`;
+}
+function clampWeight(slot){
+  const f = fdata(slot.fam), ax = axisOf(f, "wght");
+  if (ax) return Math.min(ax[2], Math.max(ax[1], slot.w));
+  if (f.custom) return slot.w;
+  return f.w.reduce((best, w) => Math.abs(w - slot.w) < Math.abs(best - slot.w) ? w : best, f.w[0]);
+}
+function varSettings(slot){
+  const out = [];
+  for (const [t, v] of Object.entries(slot.ax)){
+    if (v === null || v === undefined || t === "wght" || t === "ital") continue;
+    out.push(`"${t}" ${v}`);
+  }
+  return out.length ? out.join(",") : "normal";
+}
+function opticalSizing(slot){
+  return (slot.ax.opsz !== undefined && slot.ax.opsz !== null) ? "none" : "auto";
+}
+function slotVars(prefix, slot){
+  return [
+    `--${prefix}-ff:${stack(slot.fam)}`,
+    `--${prefix}-w:${clampWeight(slot)}`,
+    `--${prefix}-style:${slot.ital ? "italic" : "normal"}`,
+    `--${prefix}-ls:${slot.ls}em`,
+    `--${prefix}-lh:${slot.lh}`,
+    `--${prefix}-var:${varSettings(slot)}`,
+    `--${prefix}-opsz:${opticalSizing(slot)}`
+  ].join(";");
+}
+function paneCSS(id, p){
+  const z = sizes(p), m = msizes(p);
+  return `#${id}{${slotVars("dsp", p.dsp)};${slotVars("bod", p.bod)};` +
+    `--fs-h1:${z.h1}px;--fs-h2:${z.h2}px;--fs-h3:${z.h3}px;--fs-deck:${z.deck}px;` +
+    `--fs-body:${z.body}px;--fs-sm:${z.sm}px;--fs-xs:${z.xs}px;` +
+    `--m-h1:${m.h1}px;--m-h2:${m.h2}px;--m-h3:${m.h3}px;--m-deck:${m.deck}px;` +
+    `--m-body:${m.body}px;--m-sm:${m.sm}px;--m-xs:${m.xs}px;--m-quote:${m.quote}px;` +
+    `--measure:${p.measure}ch;--measure-label:"${p.measure}ch"}`;
+}
+function applyStyles(){
+  ensureFont(S.pairs.a.dsp.fam); ensureFont(S.pairs.a.bod.fam);
+  ensureFont(S.pairs.b.dsp.fam); ensureFont(S.pairs.b.bod.fam);
+  document.getElementById("panestyle").textContent =
+    paneCSS("pane-a", S.pairs.a) + paneCSS("pane-b", S.pairs.b);
+}
+
+/* ── views ─────────────────────────────────────────────────── */
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function viewEditorial(c){
+  return `<article class="ed bod" lang="${c.lang}">
+    <div class="mw">
+      <p class="kicker">${esc(c.kicker)}</p>
+      <h1 class="disp">${esc(c.h1)}</h1>
+      <p class="deck">${esc(c.deck)}</p>
+      <div class="byline"><strong>${esc(c.author)}</strong><span class="sep"></span>${esc(c.place)}<span class="sep"></span>${esc(c.date)}<span class="sep"></span>${esc(c.read)}</div>
+    </div>
+    <div class="bod col">
+      <p class="lede">${esc(c.lede)}</p>
+      <p>${esc(c.p2)}</p>
+      <h2 class="disp">${esc(c.h2a)}</h2>
+      <p>${esc(c.p3)}</p>
+      <blockquote class="disp"><p>“${esc(c.quote)}”</p><cite>${esc(c.cite)}</cite></blockquote>
+      <p>${esc(c.p4)}</p>
+      <figure><div class="stems" role="img" aria-label="Stems sorted by length, 40 to 80 cm">${[["40 cm",.42],["50",.66],["60",1],["70",.8],["80",.38]].map(([k,h]) => `<div class="stem"><i style="--h:${h}"></i><span>${k}</span></div>`).join("")}</div><figcaption>${c.figcap}</figcaption></figure>
+      <h2 class="disp">${esc(c.h2b)}</h2>
+      <dl class="stats">${c.stats.map(([k,v]) => `<div><dt>${esc(k)}</dt><dd class="disp">${esc(v)}</dd></div>`).join("")}</dl>
+      <ul>${c.list.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      <p>${esc(c.p5)}</p>
+      <p class="foot"><sup>1</sup>${c.foot}</p>
+    </div>
+  </article>`;
+}
+
+const STATUS = `<div class="statusbar bod"><span>9:41</span><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"></span></div>`;
+const BACK = `<svg class="back" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg>`;
+
+function viewMobile(c){
+  const article = `<div class="frame"><div class="cap">Article</div><div class="device">${STATUS}
+    <div class="navbar">${BACK}<span class="ttl">${esc(c.navTtl)}</span></div>
+    <div class="screen"><div class="inner">
+      <p class="m-kick">${esc(c.mkicker)}</p>
+      <h1 class="m-h1 disp">${esc(c.mh1)}</h1>
+      <p class="m-deck bod">${esc(c.mdeck)}</p>
+      <div class="m-meta bod"><span class="av"></span><strong>${esc(c.author)}</strong><span>·</span><span>${esc(c.read)}</span></div>
+      <div class="m-body bod">${c.mp.map((t,i) => (i === 2 ? `<h2 class="m-h2 disp">${esc(c.mh2)}</h2>` : "") + `<p>${esc(t)}</p>`).join("")}</div>
+    </div></div></div></div>`;
+
+  const index = `<div class="frame"><div class="cap">Index</div><div class="device">${STATUS}
+    <div class="navbar">${BACK}<span class="ttl">${esc(c.navTtl)}</span></div>
+    <div class="screen"><div class="inner">
+      <div class="m-secthead"><h2 class="disp">${esc(c.idxTitle)}</h2><span class="n bod">${c.idx.length}</span></div>
+      <p class="m-sub bod">${esc(c.idxSub)}</p>
+      <ul class="m-list bod">${c.idx.map((r,i) => `<li><span class="idx">${String(i+1).padStart(2,"0")}</span><span class="txt"><h3 class="disp">${esc(r[0])}</h3><p class="sub"><em>${esc(r[1])}</em><span class="sep"></span>${esc(r[2])}</p></span></li>`).join("")}</ul>
+    </div></div></div></div>`;
+
+  const card = `<div class="frame"><div class="cap">Quote card</div><div class="device">${STATUS}
+    <div class="navbar">${BACK}<span class="ttl">${esc(c.cardWho)}</span></div>
+    <div class="screen"><div class="inner">
+      <div class="m-card"><div class="mark">“</div>
+        <p class="q disp">${esc(c.cardQ)}</p>
+        <div class="attrib bod"><b>${esc(c.cardWho)}</b>${esc(c.cardRole)}</div>
+      </div>
+      <div class="m-actions"><button class="pri" type="button">${esc(c.cardBtns[0])}</button><button type="button">${esc(c.cardBtns[1])}</button></div>
+    </div></div></div></div>`;
+
+  return `<div class="mob" lang="${c.lang}">${article}${index}${card}</div>`;
+}
+
+function viewSpecimen(c, p, key){
+  const z = sizes(p);
+  const big = esc(S.big === null ? c.big : S.big);
+  const face = (role, slot, label) => {
+    const f = fdata(slot.fam);
+    const meta = [CAT_SHORT[f.cat] || f.cat, clampWeight(slot), slot.ital ? "Italic" : null,
+      f.axes.length ? f.axes.map(a => a[0]).join(" ") : "static"].filter(Boolean).join(" · ");
+    return `<div class="faceblock">
+      <div class="facehead"><span class="role">${label}</span><span class="fam">${esc(slot.fam)}</span><span>${esc(meta)}</span></div>
+      <p class="bigline ${role}" contenteditable="true" spellcheck="false" role="textbox" aria-label="${label} sample text, editable">${big}</p>
+      <p class="glyphs ${role}">${esc(c.glyphs)}</p>
+    </div>`;
+  };
+  const rungs = [["H1","disp",z.h1],["H2","disp",z.h2],["H3","disp",z.h3],["Deck","bod",z.deck],
+                 ["Body","bod",z.body],["Small","bod",z.sm],["Caption","bod",z.xs]]
+    .map(([k, cls, v]) => `<div class="rung"><span class="k">${k}<i>/</i>${v}px</span><span class="s ${cls}" style="font-size:${v}px">${esc(c.h1)}</span></div>`).join("");
+  const para = esc(c.p2);
+  const cols = [["Caption", z.xs],["Small", z.sm],["Body", z.body]]
+    .map(([k, v]) => `<div class="col"><span class="cl">${k} · ${v}px</span><p class="bod" style="font-size:${v}px">${para}</p></div>`).join("");
+  const cells = c.stats.map(([k, v], i) => `<div class="cell"><h4 class="disp">${esc(c.idx[i][0])}</h4><span class="num disp">${esc(v)}</span><p class="bod">${esc(k)} — ${esc(c.idx[i][1])}, ${esc(c.idx[i][2])}</p></div>`).join("");
+
+  return `<div class="spec" lang="${c.lang}">
+    <section><div class="slab">Faces in pair <b>${key.toUpperCase()}</b></div>${face("disp", p.dsp, "Display")}${face("bod", p.bod, "Text")}</section>
+    <section><div class="slab">Scale — ${p.ratio} <b>${RATIOS.find(r => r[0] === p.ratio) ? RATIOS.find(r => r[0] === p.ratio)[1] : "custom"}</b></div><div class="ladder">${rungs}</div></section>
+    <section><div class="slab">Text at three sizes</div><div class="paras">${cols}</div></section>
+    <section><div class="slab">Both faces together</div><div class="mixgrid">${cells}</div></section>
+  </div>`;
+}
+
+function renderPane(key){
+  const el = document.getElementById("pane-" + key);
+  const p = S.pairs[key], c = COPY[S.lang];
+  const tag = `<div class="panetag"><span class="dot"></span><span class="who">Pair ${key.toUpperCase()}</span><span class="fonts">${esc(p.dsp.fam)} + ${esc(p.bod.fam)}</span></div>`;
+  const body = S.view === "editorial" ? viewEditorial(c)
+             : S.view === "mobile"    ? viewMobile(c)
+             : viewSpecimen(c, p, key);
+  el.innerHTML = tag + body;
+  el.dataset.ground = S.ground;
+}
+function renderPanes(){ renderPane("a"); if (S.compare) renderPane("b"); }
+</script>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const body = document.body;
+
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400);
+}
+
+/* ── custom font loading ───────────────────────────────────── */
+const WOFF2_KNOWN = ["cmap","head","hhea","hmtx","maxp","name","OS/2","post","cvt ","fpgm","glyf","loca","prep","CFF ","VORG","EBDT","EBLC","gasp","hdmx","kern","LTSH","PCLT","VDMX","vhea","vmtx","BASE","GDEF","GPOS","GSUB","EBSC","JSTF","MATH","CBDT","CBLC","COLR","CPAL","SVG ","sbix","acnt","avar","bdat","bloc","bsln","cvar","fdsc","feat","fmtx","fvar","gvar","hsty","just","lcar","mort","morx","opbd","prop","trak","Zapf","Silf","Glat","Gloc","Feat","Sill"];
+const tag4 = (dv,o) => String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+const fx = (dv,o) => Math.round((dv.getInt32(o)/65536) * 100) / 100;
+
+function readFvar(dv, off){
+  const axesOff = off + dv.getUint16(off + 4);
+  const count = dv.getUint16(off + 8), size = dv.getUint16(off + 10), out = [];
+  for (let i = 0; i < count; i++){
+    const o = axesOff + i * size;
+    if (dv.getUint16(o + 16) & 1) continue;               // hidden axis
+    out.push([tag4(dv, o), fx(dv, o + 4), fx(dv, o + 12), fx(dv, o + 8)]);
+  }
+  return out;
+}
+async function inflate(u8){
+  const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream("deflate"));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+async function inspectFont(buf){
+  try{
+    const dv = new DataView(buf), sig = tag4(dv, 0);
+    if (sig === "wOFF"){
+      const n = dv.getUint16(12);
+      for (let i = 0; i < n; i++){
+        const o = 44 + i * 20;
+        if (tag4(dv, o) !== "fvar") continue;
+        const off = dv.getUint32(o + 4), comp = dv.getUint32(o + 8), orig = dv.getUint32(o + 12);
+        let u8 = new Uint8Array(buf, off, comp);
+        if (comp < orig) u8 = await inflate(u8);
+        const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+        return { variable:true, axes:readFvar(d, 0), exact:true };
+      }
+      return { variable:false, axes:[], exact:true };
+    }
+    if (sig === "wOF2"){
+      const n = dv.getUint16(12); const st = { p:48 };
+      const u128 = () => { let v = 0; for (let i = 0; i < 5; i++){ const b = dv.getUint8(st.p++); v = (v << 7) | (b & 0x7f); if (!(b & 0x80)) break; } return v >>> 0; };
+      for (let i = 0; i < n; i++){
+        const flags = dv.getUint8(st.p++); const known = flags & 0x3f;
+        let tg;
+        if (known === 0x3f){ tg = tag4(dv, st.p); st.p += 4; } else tg = WOFF2_KNOWN[known] || "????";
+        u128();                                             // origLength
+        const tv = flags >> 6;
+        const transformed = (tg === "glyf" || tg === "loca") ? (tv === 0) : (tv !== 0);
+        if (transformed) u128();                            // transformLength
+        if (tg === "fvar") return { variable:true, axes:[], exact:false };
+      }
+      return { variable:false, axes:[], exact:true };
+    }
+    if (sig === "ttcf") return { variable:false, axes:[], exact:false };
+    const n = dv.getUint16(4);
+    for (let i = 0; i < n; i++){
+      const o = 12 + i * 16;
+      if (tag4(dv, o) === "fvar") return { variable:true, axes:readFvar(dv, dv.getUint32(o + 8)), exact:true };
+    }
+    return { variable:false, axes:[], exact:true };
+  } catch(e){ return { variable:false, axes:[], exact:false }; }
+}
+
+function cleanName(fn){
+  return fn.replace(/\.(woff2?|otf|ttf)$/i, "").replace(/[\[\]"]/g, "")
+           .replace(/[-_]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim() || "Custom font";
+}
+async function registerFont(name, buf, insp){
+  const wa = insp.axes.find(a => a[0] === "wght");
+  const desc = insp.variable ? { weight: wa ? `${wa[1]} ${wa[2]}` : "1 1000" } : {};
+  const ff = new FontFace(name, buf, desc);
+  await ff.load();
+  document.fonts.add(ff);
+  const axes = insp.axes.length ? insp.axes : (insp.variable ? [["wght",1,1000,400]] : []);
+  CATALOG.set(name, { name, cat:CUSTOM_CAT, w:insp.variable ? [400] : [400], ital:false, axes, pop:-1, custom:true, exact:insp.exact });
+  linked.add(name);
+}
+async function addFontFile(file){
+  if (!/\.(woff2?|otf|ttf)$/i.test(file.name)) { toast(`${file.name} isn’t a font file — use .woff2, .woff, .otf or .ttf`); return null; }
+  const buf = await file.arrayBuffer();
+  const insp = await inspectFont(buf);
+  let name = cleanName(file.name);
+  while (CATALOG.has(name) && !S.customs.some(c => c.name === name)) name += " ";
+  try { await registerFont(name, buf.slice(0), insp); }
+  catch(e){ toast(`Couldn’t read ${file.name} — the file may be corrupt or an unsupported format`); return null; }
+  S.customs = S.customs.filter(c => c.name !== name);
+  S.customs.push({ name, b64:toB64(buf), insp });
+  saveState();
+  const note = insp.variable
+    ? (insp.exact ? `${name} loaded — ${insp.axes.length} variable ${insp.axes.length === 1 ? "axis" : "axes"}`
+                  : `${name} loaded — variable, but .woff2 hides its axis list, so only weight is adjustable`)
+    : `${name} loaded — static face`;
+  toast(note);
+  return name;
+}
+function toB64(buf){
+  const u8 = new Uint8Array(buf); let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromB64(b64){
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8.buffer;
+}
+
+/* ── persistence ───────────────────────────────────────────── */
+const KEY = "type-check-v1";
+function saveState(){
+  try{
+    const customs = [];
+    let budget = 3.4e6;
+    for (const c of S.customs){ if (c.b64.length < budget){ customs.push(c); budget -= c.b64.length; } }
+    localStorage.setItem(KEY, JSON.stringify({
+      view:S.view, compare:S.compare, active:S.active, ground:S.ground,
+      lang:S.lang, big:S.big, pairs:S.pairs, customs
+    }));
+  } catch(e){ /* private window, quota, blocked storage — the tool still works */ }
+  writeHash();
+}
+async function loadState(){
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); } catch(e){ return; }
+  if (!raw) return;
+  let d; try { d = JSON.parse(raw); } catch(e){ return; }
+  for (const c of (d.customs || [])){
+    try { await registerFont(c.name, fromB64(c.b64), c.insp); S.customs.push(c); } catch(e){}
+  }
+  ["view","compare","active","ground","lang","big"].forEach(k => { if (d[k] !== undefined) S[k] = d[k]; });
+  if (d.pairs && d.pairs.a && d.pairs.b) S.pairs = d.pairs;
+}
+
+/* ── font picker ───────────────────────────────────────────── */
+let previewQueue = new Set(), previewTimer = null;
+const previewed = new Set();
+function queuePreview(name){
+  if (previewed.has(name) || linked.has(name) || !CATALOG.get(name) || CATALOG.get(name).custom) return;
+  previewQueue.add(name);
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    const batch = Array.from(previewQueue).slice(0, 24);
+    previewQueue = new Set(Array.from(previewQueue).slice(24));
+    if (!batch.length) return;
+    batch.forEach(n => previewed.add(n));
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?" + batch.map(n => "family=" + n.replace(/ /g, "+")).join("&") + "&text=" + encodeURIComponent("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 &-.") + "&display=swap";
+    document.head.appendChild(l);
+    if (previewQueue.size) queuePreview(Array.from(previewQueue)[0]);
+  }, 90);
+}
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) queuePreview(e.target.dataset.fam); }), { rootMargin:"140px" });
+
+const pickerMemo = { dsp:{ q:"", cat:"all" }, bod:{ q:"", cat:"all" } };
+function buildCombo(slotKey, label){
+  const p = S.pairs[S.active], slot = p[slotKey];
+  const wrap = document.createElement("div");
+  wrap.className = "combo"; wrap.dataset.slot = slotKey;
+  const f = fdata(slot.fam);
+  wrap.innerHTML = `
+    <button type="button" class="field-in" aria-haspopup="listbox" aria-expanded="false">
+      <span class="nm">${esc(slot.fam)}</span><span class="cat">${esc(CAT_SHORT[f.cat] || f.cat)}</span>
+    </button>
+    <div class="pop" role="dialog" aria-label="Choose a ${label} face">
+      <div class="ptabs" role="group" aria-label="Show"><button type="button" data-t="fonts" aria-pressed="true">All fonts</button><button type="button" data-t="pairs" aria-pressed="false">Pairings</button></div>
+      <div class="search"><input type="text" placeholder="Search 1,600+ families…" aria-label="Search families" autocomplete="off" spellcheck="false"></div>
+      <div class="filters"></div>
+      <ul class="fonts" role="listbox" tabindex="-1"></ul>
+      <ul class="plist" role="listbox" aria-label="Starting pairings">${PRESETS.map((pr, i) =>
+        `<li role="option" data-i="${i}"><b style="font-family:'${pr.d}',serif">${esc(pr.d)}</b><span style="font-family:'${pr.b}',sans-serif">${esc(pr.b)}</span><small>${esc(pr.n)}</small></li>`).join("")}</ul>
+    </div>`;
+  const btn = wrap.querySelector(".field-in"), pop = wrap.querySelector(".pop");
+  const input = wrap.querySelector("input"), list = wrap.querySelector("ul.fonts"), filters = wrap.querySelector(".filters");
+  const memo = pickerMemo[slotKey];
+  let cat = memo.cat, cursor = 0, rows = [];
+
+  wrap.querySelectorAll(".ptabs button").forEach(t => t.onclick = e => {
+    e.stopPropagation();
+    pop.dataset.tab = t.dataset.t;
+    wrap.querySelectorAll(".ptabs button").forEach(x => x.setAttribute("aria-pressed", String(x === t)));
+    if (t.dataset.t === "pairs") PRESETS.forEach(pr => { ensureFont(pr.d); ensureFont(pr.b); });
+    else input.focus();
+  });
+  wrap.querySelectorAll(".plist li").forEach(li => li.onclick = () => {
+    const pr = PRESETS[+li.dataset.i];
+    S.pairs[S.active] = makePair(pr);
+    close(); commit(true); track("pairing_pick");
+    toast(`Pair ${S.active.toUpperCase()}: ${pr.n} (${pr.why})`);
+  });
+
+  ["all", ...GF.cats].forEach(c => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pill"; b.textContent = c === "all" ? "All" : (CAT_SHORT[c] || c);
+    b.setAttribute("aria-pressed", String(c === cat));
+    b.onclick = () => { cat = memo.cat = c; filters.querySelectorAll(".pill").forEach(x => x.setAttribute("aria-pressed", String(x === b))); draw(); };
+    filters.appendChild(b);
+  });
+
+  function matches(){
+    const q = input.value.trim().toLowerCase();
+    const all = [...S.customs.map(c => CATALOG.get(c.name)).filter(Boolean), ...GF.fonts.map(r => CATALOG.get(r[0]))];
+    return all.filter(f => f && (cat === "all" || f.cat === cat || (f.custom && cat === CUSTOM_CAT))
+                             && (!q || f.name.toLowerCase().includes(q)));
+  }
+  function draw(){
+    const all = matches();
+    rows = all.slice(0, 220);
+    cursor = Math.max(0, rows.findIndex(f => f.name === S.pairs[S.active][slotKey].fam));
+    io.disconnect();
+    list.innerHTML = "";
+    if (!rows.length){ list.innerHTML = `<li class="empty" role="presentation">No family matches “${esc(input.value)}”${cat !== "all" ? " in this category. Try All." : ". Try part of the name."}</li>`; return; }
+    let didCustomLabel = false, didGFLabel = false;
+    rows.forEach((f, i) => {
+      if (f.custom && !didCustomLabel){ didCustomLabel = true; list.insertAdjacentHTML("beforeend", `<li class="grouplab" role="presentation">Your fonts</li>`); }
+      if (!f.custom && !didGFLabel && didCustomLabel){ didGFLabel = true; list.insertAdjacentHTML("beforeend", `<li class="grouplab" role="presentation">Google Fonts</li>`); }
+      const li = document.createElement("li");
+      li.setAttribute("role","option"); li.dataset.fam = f.name; li.dataset.i = String(i);
+      li.setAttribute("aria-selected", String(f.name === S.pairs[S.active][slotKey].fam));
+      if (i === cursor) li.classList.add("cursor");
+      const meta = f.custom ? "yours" : (f.axes.length ? "var" : (CAT_SHORT[f.cat] || f.cat));
+      li.innerHTML = `<span class="lnm" style="font-family:'${f.name.replace(/'/g,"")}',${FALLBACK[f.cat]}">${esc(f.name)}</span><span class="lmeta">${esc(meta)}</span>`;
+      li.onclick = () => pick(f.name);
+      list.appendChild(li);
+      if (!f.custom) io.observe(li);
+    });
+    if (all.length > rows.length) list.insertAdjacentHTML("beforeend", `<li class="grouplab" role="presentation">${all.length - rows.length} more — keep typing to narrow</li>`);
+    const cur = list.querySelector(".cursor"); if (cur) cur.scrollIntoView({ block:"nearest" });
+  }
+  function pick(name){
+    const p = S.pairs[S.active];
+    p[slotKey].fam = name;
+    p[slotKey].ax = {};
+    p[slotKey].w = clampWeight(p[slotKey]);
+    if (!fdata(name).ital) p[slotKey].ital = false;
+    p.preset = null;
+    close(); commit(true); track("font_pick");
+  }
+  function open(){
+    $$(".combo.open").forEach(c => { if (c !== wrap) c.classList.remove("open"); });
+    wrap.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+    input.value = memo.q; draw(); input.focus(); input.select();
+  }
+  function close(){ wrap.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
+  btn.onclick = () => wrap.classList.contains("open") ? close() : open();
+  input.oninput = () => { memo.q = input.value; draw(); };
+  input.onkeydown = e => {
+    if (e.key === "Escape"){ close(); btn.focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+      e.preventDefault();
+      cursor = Math.min(rows.length - 1, Math.max(0, cursor + (e.key === "ArrowDown" ? 1 : -1)));
+      list.querySelectorAll("li[data-i]").forEach(li => li.classList.toggle("cursor", +li.dataset.i === cursor));
+      const cur = list.querySelector(".cursor"); if (cur) cur.scrollIntoView({ block:"nearest" });
+    }
+    else if (e.key === "Enter"){ e.preventDefault(); if (rows[cursor]) pick(rows[cursor].name); }
+  };
+  return wrap;
+}
+</script>
+
+<script>
+"use strict";
+
+/* ── control primitives ────────────────────────────────────── */
+function el(tag, cls, html){ const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
+
+function mkRange(o){
+  const f = el("div", "field");
+  const head = el("div", "rowhead");
+  const lab = el("span", "rowlab"); lab.textContent = o.label;
+  const val = el("span", "val"); val.textContent = o.value === null ? "auto" : o.fmt(o.value);
+  head.append(lab, val);
+  let reset = null;
+  if (o.onReset){
+    reset = el("button", "reset"); reset.type = "button"; reset.textContent = "auto";
+    reset.title = "Return this axis to the font\u2019s own default";
+    reset.hidden = o.value === null;
+    reset.onclick = o.onReset; head.insertBefore(reset, val);
+  }
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = o.min; inp.max = o.max; inp.step = o.step;
+  inp.value = o.value === null ? o.def : o.value;
+  inp.setAttribute("aria-label", o.label);
+  if (o.value === null) val.classList.add("auto");
+  inp.oninput = () => { val.classList.remove("auto"); if (reset) reset.hidden = false; val.textContent = o.fmt(+inp.value); o.onInput(+inp.value); };
+  f.append(head, inp);
+  return f;
+}
+function mkSelect(label, opts, value, onChange){
+  const f = el("div", "field");
+  const l = document.createElement("label"); l.textContent = label;
+  const s = document.createElement("select");
+  opts.forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; if (String(v) === String(value)) o.selected = true; s.appendChild(o); });
+  const id = "sel-" + Math.random().toString(36).slice(2, 8); s.id = id; l.htmlFor = id;
+  s.onchange = () => onChange(s.value);
+  f.append(l, s); return f;
+}
+function mkGroup(title, tag, open){
+  const d = el("details", "grp"); d.open = !!open;
+  const s = el("summary", null,
+    `<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3.5 2l3 3-3 3"/></svg>` +
+    `<span>${esc(title)}</span>` + (tag ? `<span class="tag">${esc(tag)}</span>` : ""));
+  d.appendChild(s);
+  const b = el("div", "grpbody"); d.appendChild(b);
+  return [d, b];
+}
+
+const px = v => v + "px";
+const em = v => (v > 0 ? "+" : "") + v.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") + "em";
+
+function slotControls(box, slotKey, isBody){
+  const p = S.pairs[S.active], slot = p[slotKey], f = fdata(slot.fam);
+
+  const wa = axisOf(f, "wght");
+  if (wa){
+    box.appendChild(mkRange({ label:"Weight", min:wa[1], max:wa[2], step:1, value:clampWeight(slot),
+      fmt:v => String(Math.round(v)), onInput:v => { slot.w = Math.round(v); p.preset = null; light(); } }));
+  } else if (f.w.length > 1){
+    box.appendChild(mkSelect("Weight", f.w.map(w => [w, String(w)]), clampWeight(slot),
+      v => { slot.w = +v; p.preset = null; commit(false); }));
+  } else {
+    const n = el("div", "field", `<span class="rowlab">Weight</span><span class="hint">${f.custom ? "Static file — one weight" : "Single weight (" + f.w[0] + ")"}</span>`);
+    box.appendChild(n);
+  }
+
+  if (f.ital){
+    const row = el("div", "inline");
+    const b = el("button", "pill"); b.type = "button"; b.textContent = "Italic";
+    b.setAttribute("aria-pressed", String(slot.ital));
+    b.onclick = () => { slot.ital = !slot.ital; b.setAttribute("aria-pressed", String(slot.ital)); p.preset = null; light(); };
+    row.appendChild(b); box.appendChild(row);
+  }
+
+  box.appendChild(mkRange({ label:"Tracking", min:-0.07, max:0.16, step:0.005, value:slot.ls,
+    fmt:em, onInput:v => { slot.ls = v; p.preset = null; light(); } }));
+  box.appendChild(mkRange({ label:"Leading", min:isBody ? 1.1 : 0.8, max:isBody ? 2.2 : 1.7, step:0.01, value:slot.lh,
+    fmt:v => v.toFixed(2), onInput:v => { slot.lh = v; p.preset = null; light(); } }));
+
+  if (isBody){
+    box.appendChild(mkRange({ label:"Measure", min:38, max:96, step:1, value:p.measure,
+      fmt:v => v + "ch", onInput:v => { p.measure = Math.round(v); light(); } }));
+  }
+
+  const extra = f.axes.filter(a => a[0] !== "wght" && a[0] !== "ital");
+  if (extra.length){
+    const note = el("div", "field", `<span class="rowlab">Variable axes</span>`);
+    box.appendChild(note);
+    extra.forEach(a => {
+      const [t, min, max] = a, def = a[3];
+      const cur = slot.ax[t] === undefined ? null : slot.ax[t];
+      const step = (max - min) <= 3 ? 0.01 : ((max - min) <= 60 ? 0.5 : 1);
+      const ctl = mkRange({
+        label: `${axisLabel(t)} · ${t}`, min, max, step, value:cur, def,
+        fmt: v => (Math.round(v * 100) / 100).toString(),
+        onInput: v => { slot.ax[t] = Math.round(v * 100) / 100; p.preset = null; light(); },
+        onReset: () => { delete slot.ax[t]; p.preset = null; commit(true); }
+      });
+      box.appendChild(ctl);
+    });
+  } else if (f.custom && !f.exact){
+    box.appendChild(el("div", "hint", "This .woff2 is variable, but the format hides its axis table — only weight can be driven from here."));
+  }
+}
+
+/* ── dock + adjust ─────────────────────────────────────────── */
+function buildControls(){
+  const p = S.pairs[S.active];
+  $("#slotDsp").replaceChildren(buildCombo("dsp", "display"));
+  $("#slotBod").replaceChildren(buildCombo("bod", "text"));
+
+  const adj = $("#adjust"), top = adj.scrollTop;
+  const dsp = $("#secDsp"), bod = $("#secBod"), sc = $("#secScale"), foot = $("#adjFoot");
+  dsp.innerHTML = "<h4>Display face</h4>"; slotControls(dsp, "dsp", false);
+  bod.innerHTML = "<h4>Text face</h4>";    slotControls(bod, "bod", true);
+
+  sc.innerHTML = "<h4>Scale</h4>";
+  sc.appendChild(mkRange({ label:"Base size", min:14, max:26, step:.5, value:p.base, fmt:px,
+    onInput:v => { p.base = v; light(); } }));
+  sc.appendChild(mkSelect("Ratio", RATIOS.map(([v, n]) => [v, `${n} · ${v}`]), p.ratio,
+    v => { p.ratio = +v; commit(false); }));
+  sc.appendChild(mkRange({ label:"Display step", min:1, max:7, step:1, value:p.step,
+    fmt:v => `${v} → ${sizes({ ...p, step:v }).h1}px`, onInput:v => { p.step = v; light(); } }));
+
+  foot.innerHTML = "";
+  foot.appendChild(mkSelect("Sample text", [["en", "English"], ["es", "Español: tildes, eñes, ¿¡"]], S.lang,
+    v => { S.lang = v; S.big = null; commit(false); }));
+  foot.appendChild(el("span", "sp"));
+  const fi = document.createElement("input"); fi.type = "file"; fi.accept = ".woff2,.woff,.otf,.ttf"; fi.multiple = true;
+  fi.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none";
+  fi.onchange = async () => { let last = null; for (const f of fi.files) last = (await addFontFile(f)) || last; fi.value = ""; if (last){ commit(true); track("font_file_added"); } };
+  const add = el("button", "btn"); add.type = "button"; add.textContent = "Add font files…";
+  add.title = "Your font files never leave this browser";
+  add.onclick = () => fi.click();
+  foot.append(fi, add);
+  if (S.compare){
+    const dup = el("button", "btn"); dup.type = "button";
+    const other = S.active === "a" ? "B" : "A";
+    dup.textContent = `Copy to ${other}`; dup.title = `Copy this pair into ${other}, then change one side`;
+    dup.onclick = () => {
+      S.pairs[S.active === "a" ? "b" : "a"] = JSON.parse(JSON.stringify(p));
+      commit(true); toast(`Pair ${S.active.toUpperCase()} copied into ${other}. Now change one side.`);
+    };
+    foot.appendChild(dup);
+  }
+  const rst = el("button", "btn"); rst.type = "button"; rst.textContent = "Reset pair";
+  rst.onclick = () => { S.pairs[S.active] = makePair(PRESETS[S.active === "a" ? 0 : 6]); commit(true); };
+  foot.appendChild(rst);
+  if (S.customs.length){
+    const box = el("div", "customs");
+    S.customs.forEach(c => {
+      const row = el("div", "inline");
+      row.style.cssText = "justify-content:space-between;gap:8px";
+      const nm = el("span"); nm.textContent = c.name; nm.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px";
+      const x = el("button", "reset"); x.type = "button"; x.textContent = "remove";
+      x.onclick = () => {
+        S.customs = S.customs.filter(v => v.name !== c.name);
+        ["a", "b"].forEach(k => ["dsp", "bod"].forEach(s => { if (S.pairs[k][s].fam === c.name) S.pairs[k][s].fam = PRESETS[0][s === "dsp" ? "d" : "b"]; }));
+        CATALOG.delete(c.name); commit(true);
+      };
+      row.append(nm, x); box.appendChild(row);
+    });
+    foot.appendChild(box);
+  }
+
+  adj.scrollTop = top;
+  const acc = S.active === "a" ? "var(--a)" : "var(--b)", soft = S.active === "a" ? "var(--a-soft)" : "var(--b-soft)";
+  [adj, $(".dock")].forEach(n => { n.style.setProperty("--accent-cur", acc); n.style.setProperty("--accent-soft-cur", soft); });
+}
+
+/* ── commit ────────────────────────────────────────────────── */
+let rafId = 0, saveT = 0;
+function light(){
+  applyStyles();
+  if (S.view === "specimen" && !(document.activeElement && document.activeElement.classList.contains("bigline"))){
+    cancelAnimationFrame(rafId); rafId = requestAnimationFrame(renderPanes);
+  }
+  clearTimeout(saveT); saveT = setTimeout(saveState, 400);
+}
+function commit(rebuild){
+  applyStyles(); renderPanes(); syncChrome();
+  if (rebuild) buildControls();
+  saveState();
+}
+function syncChrome(){
+  body.dataset.compare = S.compare ? "on" : "off";
+  $$("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === S.view)));
+  $$(".pairseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.p === S.active)));
+  $$(".pane").forEach(p => p.classList.toggle("editing", S.compare && p.dataset.pair === S.active));
+  $("#adjWho").textContent = "Pair " + S.active.toUpperCase();
+  $("#compareBtn").setAttribute("aria-pressed", String(S.compare));
+  $("#groundLight").setAttribute("aria-pressed", String(S.ground === "light"));
+  $("#groundDark").setAttribute("aria-pressed", String(S.ground === "dark"));
+  $$(".pane").forEach(p => p.dataset.ground = S.ground);
+  const adj = $("#adjust");
+  adj.dataset.sec = S.sec;
+  $$(".adjtabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.sec === S.sec)));
+}
+</script>
+
+<script>
+"use strict";
+
+/* ── CSS export ────────────────────────────────────────────── */
+function combinedImport(p){
+  const fams = [...new Set([p.dsp.fam, p.bod.fam])].filter(n => CATALOG.get(n) && !CATALOG.get(n).custom);
+  if (!fams.length) return null;
+  const parts = fams.map(n => { const u = gfUrl(CATALOG.get(n)); return u.slice(u.indexOf("family="), u.indexOf("&display")); });
+  return `https://fonts.googleapis.com/css2?${parts.join("&")}&display=swap`;
+}
+function pairCSS(key){
+  const p = S.pairs[key], z = sizes(p), m = msizes(p);
+  const rn = (RATIOS.find(r => r[0] === p.ratio) || [p.ratio, "custom"])[1];
+  const imp = combinedImport(p);
+  const locals = [p.dsp.fam, p.bod.fam].filter(n => CATALOG.get(n) && CATALOG.get(n).custom);
+  const vs = s => varSettings(s) === "normal" ? "" : `\n  font-variation-settings: ${varSettings(s)};`;
+  const it = s => s.ital ? "\n  font-style: italic;" : "";
+  return `/* Pair ${key.toUpperCase()}${p.preset ? " — " + p.preset : ""} · ${p.dsp.fam} + ${p.bod.fam} */
+${imp ? `@import url("${imp}");` : ""}${locals.length ? `\n/* Load locally, not on Google Fonts: ${locals.join(", ")} */` : ""}
+
+:root {
+  --font-display: ${stack(p.dsp.fam)};
+  --font-text: ${stack(p.bod.fam)};
+
+  /* ${rn} · ${p.ratio}, from a ${p.base}px base */
+  --text-h1: ${z.h1}px;
+  --text-h2: ${z.h2}px;
+  --text-h3: ${z.h3}px;
+  --text-deck: ${z.deck}px;
+  --text-body: ${z.body}px;
+  --text-small: ${z.sm}px;
+  --text-caption: ${z.xs}px;
+
+  /* mobile */
+  --text-h1-sm: ${m.h1}px;
+  --text-h2-sm: ${m.h2}px;
+  --text-body-sm: ${m.body}px;
+
+  --measure: ${p.measure}ch;
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  font-weight: ${clampWeight(p.dsp)};
+  letter-spacing: ${p.dsp.ls}em;
+  line-height: ${p.dsp.lh};${it(p.dsp)}${vs(p.dsp)}
+  text-wrap: balance;
+}
+
+body, .text {
+  font-family: var(--font-text);
+  font-weight: ${clampWeight(p.bod)};
+  font-size: var(--text-body);
+  letter-spacing: ${p.bod.ls}em;
+  line-height: ${p.bod.lh};${it(p.bod)}${vs(p.bod)}
+}
+
+p { max-width: var(--measure); text-wrap: pretty; }
+`;
+}
+let sheetReturn = null;
+function openSheet(title, sub, node){
+  sheetReturn = document.activeElement;
+  $$(".app, .dock, .adjust").forEach(n => n.inert = true);
+  $("#sheetTitle").textContent = title;
+  $("#sheetSub").textContent = sub || "";
+  const b = $("#sheetBody"); b.innerHTML = ""; b.appendChild(node);
+  const s = $("#sheet"); s.hidden = false; s.classList.add("on");
+  $("#sheetClose").focus();
+}
+function closeSheet(){
+  const s = $("#sheet"); s.classList.remove("on"); s.hidden = true;
+  $$(".app, .dock, .adjust").forEach(n => n.inert = false);
+  if (sheetReturn && sheetReturn.focus) sheetReturn.focus();
+}
+
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch(e){
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.style.cssText = "position:fixed;top:-200vh;left:0";
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch(_){}
+    ta.remove(); return ok;
+  }
+}
+function shareURL(){
+  return location.origin + location.pathname + "?ref=share#" + encodeHash();
+}
+function showShare(){
+  const keys = S.compare ? ["a", "b"] : [S.active];
+  const text = keys.map(pairCSS).join("\n\n");
+  const url = shareURL();
+  const wrap = el("div", "share");
+  const row = el("div", "row");
+  row.appendChild(el("p", "lead", keys.length > 1 ? "Anyone with this link sees both pairs exactly like this." : "Anyone with this link sees this pair exactly like this."));
+  const lr = el("div", "linkrow");
+  const inp = document.createElement("input"); inp.type = "text"; inp.readOnly = true; inp.value = url; inp.setAttribute("aria-label", "Share link");
+  inp.onfocus = () => inp.select();
+  const cl = el("button", "btn primary"); cl.type = "button"; cl.textContent = "Copy link";
+  cl.onclick = async () => { const ok = await copyText(url); toast(ok ? "Link copied" : "Couldn’t reach the clipboard. Select the link and copy it."); if (ok) track("copy_link"); };
+  lr.append(inp, cl); row.appendChild(lr);
+  const locals = keys.flatMap(k => [S.pairs[k].dsp.fam, S.pairs[k].bod.fam]).filter(n => fdata(n).custom);
+  if (locals.length) row.appendChild(el("p", "hint", `${[...new Set(locals)].map(esc).join(", ")} came from your computer, so other people will see a fallback face.`));
+  wrap.appendChild(row);
+  wrap.appendChild(el("h4", null, keys.length > 1 ? "CSS for both pairs" : "CSS"));
+  const pre = document.createElement("pre"); pre.textContent = text; pre.tabIndex = 0;
+  const foot = el("footer");
+  const cc = el("button", "btn"); cc.type = "button"; cc.textContent = "Copy CSS";
+  cc.onclick = async () => { const ok = await copyText(text); toast(ok ? "CSS copied" : "Couldn’t reach the clipboard. Select the text and copy it."); if (ok) track("copy_css"); };
+  foot.appendChild(cc);
+  wrap.append(pre, foot);
+  if (CLARITY_ID) wrap.appendChild(el("p", "fine", "Anonymous usage stats via Microsoft Clarity, no cookies. Your font files never leave this browser."));
+  openSheet("Share", keys.length > 1 ? "Pairs A and B" : "Pair " + keys[0].toUpperCase(), wrap);
+  track("share_open");
+}
+
+/* ── share link: the whole setup lives in the URL hash ───────── */
+const slotOut = s => [s.fam, s.w, s.ital ? 1 : 0, s.ls, s.lh, s.ax];
+const pairOut = p => [slotOut(p.dsp), slotOut(p.bod), p.base, p.ratio, p.step, p.measure];
+function encodeHash(){
+  const d = { v:1, a:pairOut(S.pairs.a), view:S.view, g:S.ground, l:S.lang, x:S.active };
+  if (S.compare){ d.b = pairOut(S.pairs.b); d.c = 1; }
+  const bytes = new TextEncoder().encode(JSON.stringify(d));
+  let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function readHash(){
+  const h = location.hash.slice(1);
+  if (!h) return false;
+  try{
+    const bin = atob(h.replace(/-/g, "+").replace(/_/g, "/"));
+    const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    if (d.v !== 1 || !Array.isArray(d.a)) return false;
+    const num = (v, lo, hi, def) => (typeof v === "number" && v >= lo && v <= hi) ? v : def;
+    const slotIn = (a, def) => (Array.isArray(a) && typeof a[0] === "string") ? {
+      fam:a[0].slice(0, 80), w:num(a[1], 1, 1000, def.w), ital:!!a[2], ls:num(a[3], -0.2, 0.3, def.ls),
+      lh:num(a[4], 0.5, 3, def.lh), ax:(a[5] && typeof a[5] === "object") ? a[5] : {} } : def;
+    const pairIn = (a, def) => Array.isArray(a) ? {
+      dsp:slotIn(a[0], def.dsp), bod:slotIn(a[1], def.bod), base:num(a[2], 10, 40, def.base),
+      ratio:num(a[3], 1, 2, def.ratio), step:num(a[4], 1, 8, def.step), measure:num(a[5], 20, 120, def.measure), preset:null } : def;
+    S.pairs.a = pairIn(d.a, makePair(PRESETS[0]));
+    if (d.b) S.pairs.b = pairIn(d.b, makePair(PRESETS[6]));
+    S.compare = !!d.c;
+    if (["editorial", "mobile", "specimen"].includes(d.view)) S.view = d.view;
+    if (d.g === "light" || d.g === "dark") S.ground = d.g;
+    if (d.l === "en" || d.l === "es") S.lang = d.l;
+    S.active = (d.x === "b" && S.compare) ? "b" : "a";
+    return true;
+  } catch(e){ return false; }
+}
+let hashT = 0;
+function writeHash(){
+  clearTimeout(hashT);
+  hashT = setTimeout(() => { try { history.replaceState(null, "", location.pathname + location.search + "#" + encodeHash()); } catch(e){} }, 300);
+}
+
+/* ── shuffle ───────────────────────────────────────────────── */
+function shuffle(){
+  const pool = GF.fonts.map(r => CATALOG.get(r[0]));
+  const textish = f => (f.cat === "Serif" || f.cat === "Sans Serif") && f.ital &&
+                       (axisOf(f, "wght") || f.w.length >= 4);
+  const bodies  = pool.filter(f => f.pop < 500 && textish(f));
+  const bod = bodies[Math.floor(Math.random() * bodies.length)];
+  const want = Math.random() < 0.75 ? (bod.cat === "Serif" ? "Sans Serif" : "Serif") : bod.cat;
+  const heads = pool.filter(f => f.pop < 800 && f.name !== bod.name &&
+                                 (f.cat === want || f.cat === "Display") &&
+                                 (axisOf(f, "wght") || f.w.some(w => w >= 600) || f.cat === "Display"));
+  const dsp = heads[Math.floor(Math.random() * heads.length)] || bod;
+  const p = S.pairs[S.active];
+  const dw = axisOf(dsp, "wght") ? 700 : dsp.w.reduce((a, w) => Math.abs(w - 700) < Math.abs(a - 700) ? w : a, dsp.w[0]);
+  S.pairs[S.active] = {
+    dsp:{ fam:dsp.name, w:dw, ital:false, ls:-0.02, lh:1.08, ax:{} },
+    bod:{ fam:bod.name, w:400, ital:false, ls:0, lh:1.62, ax:{} },
+    base:p.base, ratio:p.ratio, step:p.step, measure:p.measure, preset:null
+  };
+  commit(true); track("shuffle");
+  toast(`${dsp.name} + ${bod.name}`);
+}
+
+/* ── wiring ────────────────────────────────────────────────── */
+$$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; commit(false); if (S.view !== "editorial") track("view_" + S.view); });
+$("#compareBtn").onclick = toggleCompare;
+$("#groundLight").onclick = () => { S.ground = "light"; syncChrome(); saveState(); };
+$("#groundDark").onclick  = () => { S.ground = "dark";  syncChrome(); saveState(); track("ink"); };
+$("#shareBtn").onclick = showShare;
+$("#shuffleBtn").onclick = shuffle;
+$$(".pairseg button").forEach(b => b.onclick = () => setActive(b.dataset.p));
+$("#sheetClose").onclick = closeSheet;
+
+function toggleCompare(){ S.compare = !S.compare; if (!S.compare) S.active = "a"; commit(true); if (S.compare) track("compare_on"); }
+/* edit a sheet by clicking it; panes are not re-rendered so a caret in the specimen line survives */
+function setActive(k){
+  if (!S.compare || S.active === k) return;
+  S.active = k; buildControls(); syncChrome(); saveState();
+}
+["a", "b"].forEach(k => $("#pane-" + k).addEventListener("pointerdown", () => setActive(k)));
+
+/* adjust panel */
+function setAdjust(open){
+  const a = $("#adjust"), b = $("#adjBtn");
+  if (open === !a.hidden) return;
+  a.hidden = !open; b.setAttribute("aria-expanded", String(open));
+  if (open) track("adjust_open");
+}
+$("#adjBtn").onclick = () => setAdjust($("#adjust").hidden);
+$("#adjClose").onclick = () => { setAdjust(false); $("#adjBtn").focus(); };
+$$(".adjtabs button").forEach(b => b.onclick = () => { S.sec = b.dataset.sec; syncChrome(); });
+$("#sheet").onclick = e => { if (e.target.id === "sheet") closeSheet(); };
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".combo")) $$(".combo.open").forEach(c => { c.classList.remove("open"); c.querySelector(".field-in").setAttribute("aria-expanded", "false"); });
+  if (!$("#adjust").hidden && !e.target.closest(".adjust, #adjBtn, .combo, .sheet") && !(S.compare && e.target.closest(".pane"))) setAdjust(false);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("#sheet").classList.contains("on")){ closeSheet(); return; }
+  if (e.key === "Escape" && !$("#adjust").hidden && !e.target.closest(".combo")){ setAdjust(false); $("#adjBtn").focus(); return; }
+  const t = e.target;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  if (k === "1"){ S.view = "editorial"; commit(false); }
+  else if (k === "2"){ S.view = "mobile"; commit(false); }
+  else if (k === "3"){ S.view = "specimen"; commit(false); }
+  else if (k === "c"){ toggleCompare(); }
+  else if (k === "d"){ S.ground = S.ground === "light" ? "dark" : "light"; syncChrome(); saveState(); }
+  else if (k === "s"){ shuffle(); }
+  else if (k === "a" || k === "b"){ setActive(k); }
+  else return;
+  e.preventDefault();
+});
+
+/* editable specimen line — keep both panes in step without killing the caret */
+document.addEventListener("input", e => {
+  const n = e.target;
+  if (!n.classList || !n.classList.contains("bigline")) return;
+  S.big = n.textContent;
+  $$(".bigline").forEach(o => { if (o !== n && o.textContent !== S.big) o.textContent = S.big; });
+  clearTimeout(saveT); saveT = setTimeout(saveState, 500);
+});
+
+/* synced scrolling in compare mode */
+let syncing = false;
+["a", "b"].forEach(k => {
+  const pane = $("#pane-" + k), other = $("#pane-" + (k === "a" ? "b" : "a"));
+  pane.addEventListener("scroll", () => {
+    if (!S.compare || syncing) return;
+    syncing = true;
+    const max = pane.scrollHeight - pane.clientHeight;
+    const omax = other.scrollHeight - other.clientHeight;
+    other.scrollTop = max > 0 ? (pane.scrollTop / max) * omax : 0;
+    other.scrollLeft = pane.scrollLeft;
+    requestAnimationFrame(() => { syncing = false; });
+  }, { passive:true });
+});
+
+/* drag & drop font files */
+let dragDepth = 0;
+window.addEventListener("dragenter", e => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+  dragDepth++; body.dataset.drag = "on";
+});
+window.addEventListener("dragover", e => { if (body.dataset.drag === "on") e.preventDefault(); });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0){ dragDepth = 0; body.dataset.drag = "off"; } });
+window.addEventListener("drop", async e => {
+  if (body.dataset.drag !== "on") return;
+  e.preventDefault(); dragDepth = 0; body.dataset.drag = "off";
+  let last = null;
+  for (const f of Array.from(e.dataTransfer.files)) last = (await addFontFile(f)) || last;
+  if (last){
+    const p = S.pairs[S.active];
+    p.dsp.fam = last; p.dsp.ax = {}; p.dsp.w = clampWeight(p.dsp); p.preset = null;
+    commit(true);
+  }
+});
+
+/* ── boot ──────────────────────────────────────────────────── */
+(async function boot(){
+  await loadState();
+  const shared = readHash();
+  const ref = new URLSearchParams(location.search).get("ref");
+  if (ref){
+    try { window.clarity && window.clarity("set", "ref", ref); } catch(e){}
+    if (ref === "share" && shared) track("share_link_opened");
+    try { history.replaceState(null, "", location.pathname + location.hash); } catch(e){}
+  }
+  syncChrome();
+  applyStyles();
+  buildControls();
+  renderPanes();
+})();
+</script>
