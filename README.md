@@ -25,7 +25,7 @@ Designed and built by [Sebastian Javela](https://sebasjavela.framer.website) wit
 
 ## Privacy
 
-Anonymous usage stats with Microsoft Clarity. No accounts, nothing to sign up for. Your font files never leave your browser.
+Anonymous usage stats with Microsoft Clarity, no cookies. No accounts, nothing to sign up for. Your font files never leave your browser.
 
 ## License
 
