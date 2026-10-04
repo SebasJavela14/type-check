@@ -1703,7 +1703,7 @@ function showShare(){
   cc.onclick = async () => { const ok = await copyText(text); toast(ok ? "CSS copied" : "Couldn’t reach the clipboard. Select the text and copy it."); if (ok) track("copy_css"); };
   foot.appendChild(cc);
   wrap.append(pre, foot);
-  if (CLARITY_ID) wrap.appendChild(el("p", "fine", "Anonymous usage stats via Microsoft Clarity, no cookies. Your font files never leave this browser."));
+  if (CLARITY_ID) wrap.appendChild(el("p", "fine", "Anonymous usage stats via Microsoft Clarity. Your font files never leave this browser."));
   openSheet("Share", keys.length > 1 ? "Pairs A and B" : "Pair " + keys[0].toUpperCase(), wrap);
   track("share_open");
 }
